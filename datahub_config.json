@@ -1,0 +1,17 @@
+{
+  "datahubMeta": {
+    "datahubRootFilepath": "C:/Users/pernulio/Dropbox/Finance/data/datahub",
+    "userInputHubName": "userinput",
+    "sourceLayerName": "source",
+    "transformLayerName": "transform",
+    "applicationLayerName": "application"
+  },
+  "datahubCashflowMeta": {
+    "filePath": "cashflow",
+    "transformFileName": "cashflow.csv",
+    "cashflowHub": {
+      "filePath": "toshl",
+      "sourceFilePattern": "bilanz_*.csv"
+    }
+  }
+}
