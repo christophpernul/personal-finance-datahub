@@ -1,0 +1,17 @@
+[tool.poetry]
+name = "personal-finance-datahub"
+version = "0.1.0"
+description = "Provides a datahub for several data sources ranging from cashflow data to ETF, stock and crypto data."
+authors = ["Christoph Pernul <cpernul@gmail.com>"]
+license = "MIT"
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.11"
+pandas = "^2"
+pathlib = "^1"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
