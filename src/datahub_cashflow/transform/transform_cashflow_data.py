@@ -65,7 +65,7 @@ def cleaning_cashflow(df_input: pd.DataFrame) -> pd.DataFrame:
     df_init.loc[df_init["split_tags"].apply(len) > 1, "Tags"] = "Urlaub"
 
     df_init = df_init[["Date", "Category", "Tags", "Amount"]]
-    return (df_init)
+    return df_init
 
 
 def split_cashflow_data(df_cleaned: pd.DataFrame) -> pd.DataFrame:
@@ -83,7 +83,7 @@ def split_cashflow_data(df_cleaned: pd.DataFrame) -> pd.DataFrame:
     incomes = df_grouped[df_grouped["Amount"] > 0.].copy()
     expenses = df_grouped[df_grouped["Amount"] <= 0.].copy()
 
-    return ((incomes, expenses))
+    return (incomes, expenses)
 
 
 def combine_incomes(toshl_income, excel_income):
@@ -119,9 +119,10 @@ def preprocess_cashflow(df: pd.DataFrame) -> pd.DataFrame:
     :return: dataframe, where each row consists of cashflow data of of a month, each column represents a
             custom category
     """
+    # TODO: Use three different checks for this to know what is the issue! AND check why Category is in there now!
     assert isinstance(df.index, pd.core.indexes.multi.MultiIndex) and \
            set(df.index.names) == set(["Date", "Tags"]) and \
-           list(df.columns) == ["Amount"], "Dataframe is not grouped by month!"
+           list(df.columns) == ["Category", "Amount"], "Dataframe is not grouped by month!"
     ### Define custom categories for all tags of Toshl: Make sure category names differ from tag-names,
     ### otherwise column is dropped and aggregate is wrong
     category_dict = {

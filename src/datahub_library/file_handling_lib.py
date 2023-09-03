@@ -27,7 +27,7 @@ def get_datahub_config(config_file_name: str = "datahub_config.json") -> Dict:
         raise FileNotFoundError(f"Config file {config_file_name} not found!")
 
 
-def load_data(filepath: Path, used_library: str = "pandas") -> pd.DataFrame | None:
+def load_data(filepath: Path, used_library: str = "pandas", file_type: str = "csv") -> pd.DataFrame | None:
     """
     Loads data from given filepath and given file_extension
     Parameters
@@ -40,10 +40,18 @@ def load_data(filepath: Path, used_library: str = "pandas") -> pd.DataFrame | No
 
     """
     implemented_libraries = ("pandas")
+    # TODO: Change filetype to excel instead of odf, add check that nothing else gets handed over
+    allowed_file_types = ("csv", "odf")
+    # if file_type == "csv":
+    #     load_func = pd.read_csv
+    # elif file_type == "odf":
+    #     load_func = pd.read_excel
     # TODO: Add polars
-    if used_library == "pandas":
+    if used_library == "pandas" and file_type == "csv":
         return pd.read_csv(filepath_or_buffer=filepath)
-    if used_library != "pandas":
+    elif used_library == "pandas" and file_type == "excel":
+        return pd.read_excel(filepath, engine="odf")
+    elif used_library != "pandas":
         warn(f"Provided library is not supported yet! Use one of the following: {''.join(implemented_libraries)}")
 
 
