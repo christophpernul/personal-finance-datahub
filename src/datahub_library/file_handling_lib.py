@@ -63,6 +63,6 @@ def save_data(data: pd.DataFrame, filepath: Path, used_library: str = "pandas") 
     implemented_libraries = ("pandas")
     # TODO: Add polars
     if used_library == "pandas":
-        return data.to_csv(path_or_buf=filepath)
+        return data.to_csv(path_or_buf=filepath, index=False)
     if used_library != "pandas":
         warn(f"Provided library is not supported yet! Use one of the following: {''.join(implemented_libraries)}")
