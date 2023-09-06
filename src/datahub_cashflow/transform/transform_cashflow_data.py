@@ -2,7 +2,7 @@ import pandas as pd
 from pathlib import Path
 from typing import Dict
 
-from src.datahub_library.file_handling_lib import get_datahub_config, load_data
+from datahub_library.file_handling_lib import get_datahub_config, load_data
 
 
 def update_toshl_cashflow(datahub_source_root_path: Path, datahub_cashflow_config: Dict) -> pd.DataFrame:
@@ -33,11 +33,11 @@ def cleaning_cashflow(df_input: pd.DataFrame) -> pd.DataFrame:
     df_init = df_input.copy()
     df_init['Date'] = pd.to_datetime(df_init['Date'], format='%m/%d/%y')
     df_init.drop(columns=['Account', 'Currency', 'Main currency', 'Description'], inplace=True)
-    df_init['Expense amount'] = df_init['Expense amount'].str.replace(',', '')
-    df_init['Income amount'] = df_init['Income amount'].str.replace(',', '').astype('float64')
-    df_init['In main currency'] = df_init['In main currency'].str.replace(',', '')
-    df_init['Expense amount'] = df_init['Expense amount'].astype('float64')
-    df_init['In main currency'] = df_init['In main currency'].astype('float64')
+
+    df_init['Expense amount'] = df_init['Expense amount'].replace(',', '', regex=True).astype('float64')
+    df_init['Income amount'] = df_init['Income amount'].replace(',', '', regex=True).astype('float64')
+    df_init['In main currency'] = df_init['In main currency'].replace(',', '', regex=True).astype('float64')
+
 
     ### Preprocessing of cashflow amounts
     df_init['Amount'] = pd.Series([-y if x > 0. else y
@@ -64,7 +64,7 @@ def cleaning_cashflow(df_input: pd.DataFrame) -> pd.DataFrame:
         'Some entries with multiple tags do not contain "Urlaub"! Mapping not possible!'
     df_init.loc[df_init["split_tags"].apply(len) > 1, "Tags"] = "Urlaub"
 
-    df_init = df_init[["Date", "Category", "Tags", "Amount"]]
+    df_init = df_init[["Date", "Tags", "Amount"]]
     return df_init
 
 
@@ -122,7 +122,7 @@ def preprocess_cashflow(df: pd.DataFrame) -> pd.DataFrame:
     # TODO: Use three different checks for this to know what is the issue! AND check why Category is in there now!
     assert isinstance(df.index, pd.core.indexes.multi.MultiIndex) and \
            set(df.index.names) == set(["Date", "Tags"]) and \
-           list(df.columns) == ["Category", "Amount"], "Dataframe is not grouped by month!"
+           list(df.columns) == ["Amount"], "Dataframe is not grouped by month!"
     ### Define custom categories for all tags of Toshl: Make sure category names differ from tag-names,
     ### otherwise column is dropped and aggregate is wrong
     category_dict = {
@@ -142,11 +142,11 @@ def preprocess_cashflow(df: pd.DataFrame) -> pd.DataFrame:
         "private_devices": ['devices', 'bike', 'bicycle', 'movies & TV', 'mobile phone', 'home improvement',
                             'internet', 'landline phone', 'furniture'],
         "presents": ['birthday', 'X-Mas'],
-        "other": ['wechsel', 'income tax', 'tuition', 'publications', 'Spende'],
+        "other": ['wechsel', 'income tax', 'tuition', 'publications', 'Spende', 'property tax'],
         "stocks": ['equity purchase'],
         #### Income categories
         "compensation_caution": ["Entschädigung"],
-        "salary": ["Salary", "Gehalt Vorschuss", "Reisekosten"],
+        "salary": ["Salary", "Gehalt Vorschuss", "Reisekosten", "Inflationsbonus"],
         "present": ["Geschenk"],
         "tax_compensation": ["Kirchensteuer Erstattung", "Steuerausgleich"],
         "investment_profit": ["Investing"]

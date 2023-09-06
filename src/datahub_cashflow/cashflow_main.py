@@ -1,7 +1,7 @@
 from pathlib import Path
 from typing import Dict
-from src.datahub_library.file_handling_lib import get_datahub_config, save_data, load_data
-from src.datahub_cashflow.transform.transform_cashflow_data import (update_toshl_cashflow, preprocess_cashflow,
+from datahub_library.file_handling_lib import get_datahub_config, save_data, load_data
+from datahub_cashflow.transform.transform_cashflow_data import (update_toshl_cashflow, preprocess_cashflow,
                                                                     split_cashflow_data, cleaning_cashflow,
                                                                     combine_incomes)
 
@@ -23,7 +23,7 @@ if __name__ == "__main__":
     a_00_cashflow = update_toshl_cashflow(datahub_source_root_path=DATAHUB_SOURCE_FILEPATH,
                                         datahub_cashflow_config=DATAHUB_CONFIG_CASHFLOW_META,
                                         )
-    save_data(data=a_00_cashflow,
+    save_data(data=a_00_cashflow.reset_index(),
               filepath=filepath,
               )
     a_01_cashflow = cleaning_cashflow(a_00_cashflow)
@@ -38,17 +38,25 @@ if __name__ == "__main__":
     filepath_expenses = filepath_toshl_cashflow / (f"{stage}_" + "expenses.csv")
     a_10_incomes, a_10_expenses = split_cashflow_data(a_01_cashflow)
     a_11_incomes = combine_incomes(a_10_incomes, a_01_incomes)
-    save_data(data=a_11_incomes,
+    save_data(data=a_11_incomes.reset_index(),
               filepath=filepath_incomes,
               )
-    save_data(data=a_10_expenses,
+    save_data(data=a_10_expenses.reset_index(),
               filepath=filepath_expenses,
               )
 
     # TODO: Simplify preprocessing
     stage = "a_20"
     filepath = filepath_toshl_cashflow / (f"{stage}_" + "incomes.csv")
-    a_20_caution, a_20_incomes = preprocess_cashflow(a_11_incomes)
-    save_data(data=a_20_incomes,
+    a_20_caution_incomes, a_20_incomes = preprocess_cashflow(a_11_incomes)
+    save_data(data=a_20_incomes.reset_index(),
               filepath=filepath,
               )
+
+    filepath = filepath_toshl_cashflow / (f"{stage}_" + "expenses.csv")
+    a_20_caution_expenses, a_20_expenses = preprocess_cashflow(a_10_expenses)
+    save_data(data=a_20_expenses.reset_index(),
+              filepath=filepath,
+              )
+
+    test = load_data(filepath=filepath)
