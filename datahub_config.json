@@ -7,10 +7,9 @@
     "applicationLayerName": "application"
   },
   "datahubCashflowMeta": {
-    "filePath": "cashflow",
-    "transformFileName": "cashflow.csv",
-    "cashflowHub": {
-      "filePath": "toshl",
+    "relativePath": "cashflow",
+    "toshl": {
+      "relativePath": "toshl",
       "sourceFilePattern": "bilanz_*.csv"
     }
   }

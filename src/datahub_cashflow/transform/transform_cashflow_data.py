@@ -1,112 +1,143 @@
 import pandas as pd
 from pathlib import Path
-from typing import Dict
+from typing import Dict, Tuple, Any
 
-from datahub_library.file_handling_lib import get_datahub_config, load_data
+from datahub_library.file_handling_lib import load_data
 
 
 def update_toshl_cashflow(
-    datahub_source_root_path: Path, datahub_cashflow_config: Dict
+    source_root_path: Path, raw_data_filepattern: str
 ) -> pd.DataFrame:
-    filepath_toshl = (
-        datahub_source_root_path
-        / datahub_cashflow_config["filePath"]
-        / datahub_cashflow_config["cashflowHub"]["filePath"]
-    )
-    raw_data_filepattern = datahub_cashflow_config["cashflowHub"]["sourceFilePattern"]
-
-    raw_data_files: [Path] = sorted(filepath_toshl.glob(raw_data_filepattern))
+    raw_data_files: [Path] = sorted(source_root_path.glob(raw_data_filepattern))
     for cnt, raw_file_path in enumerate(raw_data_files):
-        df = load_data(raw_file_path)
+        df: pd.DataFrame = load_data(raw_file_path)
         assert (
             df.drop("Description", axis=1).isna().sum().sum() == 0
         ), f"There are NaN values in Toshl data!"
         if cnt == 0:
-            df_cashflow = df.copy()
+            df_cashflow: pd.DataFrame = df.copy()
         else:
             df_cashflow = pd.concat([df_cashflow, df], ignore_index=True)
         print(f"File {raw_file_path.name} contains {df.count()[0]} rows.")
     return df_cashflow
 
 
-def cleaning_cashflow(df_input: pd.DataFrame) -> pd.DataFrame:
+def cleaning_cashflow(df: pd.DataFrame) -> pd.DataFrame:
     """
     Data cleaning and preprocessing of cashflow data.
-    :param df_input: Multiple toshl monthly-exports appended into a single dataframe
-    :return: preprocessed dataframe
+    Parameters
+    ----------
+    df: containing all cashflow data
+
+    Returns
+    -------
+    cleaned cashflow data
     """
+    column_name_mapping = {
+        "Date": "date",
+        "Account": "account",
+        "Category": "category",
+        "Tags": "tag",
+        "Expense amount": "expense_amount",
+        "Income amount": "income_amount",
+        "Currency": "currency",
+        "In main currency": "amount_main_currency",
+        "Main currency": "main_currency",
+        "Description": "description",
+    }
+    output_columns = [
+        "date",
+        "category",
+        "tag",
+        "expense_amount",
+        "income_amount",
+        "amount_main_currency",
+    ]
+    expected_input_columns = set(column_name_mapping.keys())
     assert (
-        df_input.drop("Description", axis=1).isna().sum().sum() == 0
-    ), f"There are NaN values in Toshl data!"
-    ### Data cleaning
-    df_init = df_input.copy()
-    df_init["Date"] = pd.to_datetime(df_init["Date"], format="%m/%d/%y")
-    df_init.drop(
-        columns=["Account", "Currency", "Main currency", "Description"], inplace=True
+        set(df.columns).intersection(expected_input_columns) == expected_input_columns
+    ), f"Not all columns contained in data. Difference: {expected_input_columns.difference(set(df.columns))}"
+    assert (
+        df.drop("Description", axis=1).isna().sum().sum() == 0
+    ), f"There are NaN values in Toshl data, which is not expected! Please check!"
+
+    df_cleaned = df.copy()
+    df_cleaned = df_cleaned.rename(columns=column_name_mapping)[output_columns]
+    df_cleaned["date"] = pd.to_datetime(df_cleaned["date"], format="%m/%d/%y")
+    df_cleaned["expense_amount"] = (
+        df_cleaned["expense_amount"].replace(",", "", regex=True).astype("float64")
+    )
+    df_cleaned["income_amount"] = (
+        df_cleaned["income_amount"].replace(",", "", regex=True).astype("float64")
+    )
+    df_cleaned["amount_main_currency"] = (
+        df_cleaned["amount_main_currency"]
+        .replace(",", "", regex=True)
+        .astype("float64")
     )
 
-    df_init["Expense amount"] = (
-        df_init["Expense amount"].replace(",", "", regex=True).astype("float64")
-    )
-    df_init["Income amount"] = (
-        df_init["Income amount"].replace(",", "", regex=True).astype("float64")
-    )
-    df_init["In main currency"] = (
-        df_init["In main currency"].replace(",", "", regex=True).astype("float64")
-    )
-
-    ### Preprocessing of cashflow amounts
-    df_init["Amount"] = pd.Series(
+    # Create unique amount column
+    df_cleaned["amount"] = pd.Series(
         [
             -y if x > 0.0 else y
-            for x, y in zip(df_init["Expense amount"], df_init["In main currency"])
+            for x, y in zip(
+                df_cleaned["expense_amount"], df_cleaned["amount_main_currency"]
+            )
         ]
     )
-    # TODO: What are these assertions doing?!
-    # assert df_init[(~df_init["Income amount"].isin(["0.0", "0"])) &
-    #                (df_init["In main currency"] != df_init["Amount"])
-    #                ].count().sum() == 0, "Income amount does not match with main currency amount!"
-    # assert df_init[(~df_init["Expense amount"].isin(["0.0", "0"])) &
-    #                (-df_init["In main currency"] != df_init["Amount"])
-    #                ].count().sum() == 0, "Expense amount does not match with main currency amount!"
-
-    ### Remap all tags with category "Urlaub" to "old-tag, Urlaub" and map afterwards all double-tags
-    ### containing "Urlaub" to the Urlaub tag
-    df_init.loc[df_init["Category"] == "Urlaub", "Tags"] = df_init["Tags"].apply(
-        lambda tag: tag + ", Urlaub"
-    )
-    df_init["split_tags"] = df_init["Tags"].apply(lambda x: x.split(","))
     assert (
-        df_init[df_init["split_tags"].apply(len) > 1]["split_tags"]
-        .apply(lambda x: "Urlaub" in [s.strip() for s in x])
-        .all()
-        == True
-    ), 'Some entries with multiple tags do not contain "Urlaub"! Mapping not possible!'
-    df_init.loc[df_init["split_tags"].apply(len) > 1, "Tags"] = "Urlaub"
+        df_cleaned[
+            (df_cleaned["income_amount"] != 0.0)
+            & (df_cleaned["amount_main_currency"] != df_cleaned["amount"])
+        ]
+        .count()
+        .sum()
+        == 0
+    ), "Income amount does not match with main currency amount!"
+    assert (
+        df_cleaned[
+            (df_cleaned["expense_amount"] != 0.0)
+            & (-df_cleaned["amount_main_currency"] != df_cleaned["amount"])
+        ]
+        .count()
+        .sum()
+        == 0
+    ), "Expense amount does not match with main currency amount!"
 
-    df_init = df_init[["Date", "Tags", "Amount"]]
-    return df_init
+    # All entries that either have category Urlaub or contain Urlaub in the tag field are marked as Urlaub
+    df_cleaned.loc[
+        (df_cleaned["category"] == "Urlaub")
+        | (df_cleaned["tag"].str.contains("Urlaub")),
+        "tag",
+    ] = "Urlaub"
+
+    df_cleaned = df_cleaned[["date", "tag", "amount"]]
+    return df_cleaned
 
 
-def split_cashflow_data(df_cleaned: pd.DataFrame) -> pd.DataFrame:
+def split_cashflow_data(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
-    Splits whole cashflow data into incomes and expenses and groups it monthly and sums amounts per tag
-    :param df_cleaned: Cleaned dataframe of cashflow
-    :return: Tuple of dataframes holding incomes and expenses, each grouped by month
+    Splits whole cashflow data into incomes and expenses, groups it monthly and sums amounts per tag
+
+    Parameters
+    ----------
+    df  Cleaned cashflow data with columns ["tag", "date", "amount"]
+
+    Returns
+    -------
+    Tuple of dataframes holding incomes and expenses, each grouped by month
     """
-    needed_columns = ["Tags", "Date", "Amount"]
-    assert set(needed_columns).intersection(set(df_cleaned.columns)) == set(
+    needed_columns = ["tag", "date", "amount"]
+    assert set(needed_columns).intersection(set(df.columns)) == set(
         needed_columns
-    ), "Columns missing! Need: {0}, Have: {1}".format(
-        needed_columns, list(df_cleaned.columns)
-    )
+    ), "Columns missing! Need: {0}, Have: {1}".format(needed_columns, list(df.columns))
 
-    df_grouped = df_cleaned.groupby([pd.Grouper(key="Date", freq="1M"), "Tags"]).sum()
+    df_grouped = df.groupby([pd.Grouper(key="date", freq="1M"), "tag"]).sum()
 
-    incomes = df_grouped[df_grouped["Amount"] > 0.0].copy()
-    expenses = df_grouped[df_grouped["Amount"] <= 0.0].copy()
+    incomes = df_grouped[df_grouped["amount"] > 0.0].copy()
+    expenses = df_grouped[df_grouped["amount"] <= 0.0].copy()
 
-    return (incomes, expenses)
+    return incomes, expenses
 
 
 def combine_incomes(toshl_income, excel_income):
@@ -117,18 +148,18 @@ def combine_incomes(toshl_income, excel_income):
     :return: Total income data
     """
     df_in = toshl_income.reset_index().copy()
-    df_in["Tags"] = df_in["Tags"].apply(
+    df_in["tag"] = df_in["tag"].apply(
         lambda x: "Salary" if x in ["Privat", "NHK", "OL"] else x
     )
 
     df_in2 = excel_income.copy()
     df_in2 = (
         df_in2[["Datum", "Art", "Betrag"]]
-        .rename(columns={"Datum": "Date", "Art": "Tags", "Betrag": "Amount"})
+        .rename(columns={"Datum": "date", "Art": "tag", "Betrag": "amount"})
         .dropna()
     )
-    df_in2["Date"] = pd.to_datetime(df_in2["Date"], format="%d.%m.%Y")
-    df_in2["Tags"] = df_in2["Tags"].apply(
+    df_in2["date"] = pd.to_datetime(df_in2["date"], format="%d.%m.%Y")
+    df_in2["tag"] = df_in2["tag"].apply(
         lambda x: "Salary" if x in ["Gehalt", "Sodexo"] else x
     )
 
@@ -137,7 +168,7 @@ def combine_incomes(toshl_income, excel_income):
         df_income.count()[0] == df_in.count()[0] + df_in2.count()[0]
     ), "Some income rows were lost!"
 
-    df_income = df_income.groupby([pd.Grouper(key="Date", freq="1M"), "Tags"]).sum()
+    df_income = df_income.groupby([pd.Grouper(key="date", freq="1M"), "tag"]).sum()
 
     return df_income
 
@@ -153,8 +184,8 @@ def preprocess_cashflow(df: pd.DataFrame) -> pd.DataFrame:
     # TODO: Use three different checks for this to know what is the issue! AND check why Category is in there now!
     assert (
         isinstance(df.index, pd.core.indexes.multi.MultiIndex)
-        and set(df.index.names) == set(["Date", "Tags"])
-        and list(df.columns) == ["Amount"]
+        and set(df.index.names) == set(["date", "tag"])
+        and list(df.columns) == ["amount"]
     ), "Dataframe is not grouped by month!"
     ### Define custom categories for all tags of Toshl: Make sure category names differ from tag-names,
     ### otherwise column is dropped and aggregate is wrong
@@ -261,7 +292,7 @@ def preprocess_cashflow(df: pd.DataFrame) -> pd.DataFrame:
 
     category_list = reduce(lambda x, y: x + y, category_dict.values())
 
-    ### Need another format of the table, fill NaNs with zero and drop level 0 index "Amount"
+    ### Need another format of the table, fill NaNs with zero and drop level 0 index "amount"
     pivot_init = df.unstack()
     pivot_init.fillna(0, inplace=True)
     pivot_init.columns = pivot_init.columns.droplevel()
@@ -290,29 +321,8 @@ def preprocess_cashflow(df: pd.DataFrame) -> pd.DataFrame:
 
     ### Keep only categories with non-zero total amount in dataframe
     category_sum = pivot.sum().reset_index()
-    nonzero_categories = list(category_sum[category_sum[0] != 0.0]["Tags"])
+    nonzero_categories = list(category_sum[category_sum[0] != 0.0]["tag"])
 
     pivot = pivot[nonzero_categories]
 
     return (building_upkeep, pivot)
-
-
-if __name__ == "__main__":
-    datahub_config = get_datahub_config()
-    config_dh = datahub_config["datahubMeta"]
-    config_cashflow_dh = datahub_config["datahubCashflowMeta"]
-    filepath_source_root = (
-        Path(config_dh["datahubRootFilepath"]) / config_dh["sourceLayerName"]
-    )
-
-    df_cashflow = update_toshl_cashflow(
-        datahub_source_root_path=filepath_source_root,
-        datahub_cashflow_config=config_cashflow_dh,
-    )
-    print("All done!")
-
-    df_cashflow = pl.cleaning_cashflow(df_cashflow_init)
-    (incomes, expenses) = pl.split_cashflow_data(df_cashflow)
-    (caution_expenses, df_expenses) = pl.preprocess_cashflow(expenses)
-    df_income_total = pl.combine_incomes(incomes, df_income_init)
-    (caution_income, df_incomes) = pl.preprocess_cashflow(df_income_total)
