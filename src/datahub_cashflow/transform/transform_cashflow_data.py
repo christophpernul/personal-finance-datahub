@@ -1,8 +1,10 @@
 import pandas as pd
+from pandas import Series, DataFrame
 from pathlib import Path
+from functools import reduce
 from typing import Dict, Tuple, Any
 
-from datahub_library.file_handling_lib import load_data
+from datahub_library.file_handling_lib import load_data, load_json
 
 
 def update_toshl_cashflow(
@@ -24,7 +26,11 @@ def update_toshl_cashflow(
 
 def cleaning_cashflow(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Data cleaning and preprocessing of cashflow data.
+    Data cleaning and preprocessing of cashflow data:
+    1. Rename columns to snakecase names
+    2. Drop 1000s separators (,) and convert datatypes
+    3. Create a unique column containing the amount spent or received
+    4. Map all rows containing Urlaub to a vacation tag
     Parameters
     ----------
     df: containing all cashflow data
@@ -45,7 +51,7 @@ def cleaning_cashflow(df: pd.DataFrame) -> pd.DataFrame:
         "Main currency": "main_currency",
         "Description": "description",
     }
-    output_columns = [
+    relevant_columns = [
         "date",
         "category",
         "tag",
@@ -53,6 +59,13 @@ def cleaning_cashflow(df: pd.DataFrame) -> pd.DataFrame:
         "income_amount",
         "amount_main_currency",
     ]
+    output_columns = [
+        "date",
+        "tag",
+        "amount",
+    ]
+    salary_tags = ["Privat", "NHK", "OL"]
+
     expected_input_columns = set(column_name_mapping.keys())
     assert (
         set(df.columns).intersection(expected_input_columns) == expected_input_columns
@@ -62,7 +75,7 @@ def cleaning_cashflow(df: pd.DataFrame) -> pd.DataFrame:
     ), f"There are NaN values in Toshl data, which is not expected! Please check!"
 
     df_cleaned = df.copy()
-    df_cleaned = df_cleaned.rename(columns=column_name_mapping)[output_columns]
+    df_cleaned = df_cleaned.rename(columns=column_name_mapping)[relevant_columns]
     df_cleaned["date"] = pd.to_datetime(df_cleaned["date"], format="%m/%d/%y")
     df_cleaned["expense_amount"] = (
         df_cleaned["expense_amount"].replace(",", "", regex=True).astype("float64")
@@ -76,7 +89,7 @@ def cleaning_cashflow(df: pd.DataFrame) -> pd.DataFrame:
         .astype("float64")
     )
 
-    # Create unique amount column
+    # Create unique amount column depending whether expense_amount is positive (expense) or zero (income)
     df_cleaned["amount"] = pd.Series(
         [
             -y if x > 0.0 else y
@@ -109,9 +122,14 @@ def cleaning_cashflow(df: pd.DataFrame) -> pd.DataFrame:
         (df_cleaned["category"] == "Urlaub")
         | (df_cleaned["tag"].str.contains("Urlaub")),
         "tag",
-    ] = "Urlaub"
+    ] = "vacation"
 
-    df_cleaned = df_cleaned[["date", "tag", "amount"]]
+    # Combine all kinds of salary tags
+    df_cleaned["tag"] = df_cleaned["tag"].apply(
+        lambda x: "salary" if x in salary_tags else x
+    )
+
+    df_cleaned = df_cleaned[output_columns]
     return df_cleaned
 
 
@@ -140,28 +158,33 @@ def split_cashflow_data(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
     return incomes, expenses
 
 
-def combine_incomes(toshl_income, excel_income):
+def combine_incomes(
+    toshl_income: pd.DataFrame, excel_income: pd.DataFrame
+) -> pd.DataFrame:
     """
     Combines two data sources of incomes: toshl incomes and incomes from cashflow excel.
-    :param toshl_income: Preprocessed dataframe of toshl incomes (after cleaning and splitting)
-    :param excel_income: Raw excel income data
-    :return: Total income data
+
+    Parameters
+    ----------
+    toshl_income: Preprocessed dataframe of toshl incomes
+    excel_income: Raw excel income data
+
+    Returns
+    -------
+    A single dataframe containing all income entries
     """
     df_in = toshl_income.reset_index().copy()
-    df_in["tag"] = df_in["tag"].apply(
-        lambda x: "Salary" if x in ["Privat", "NHK", "OL"] else x
-    )
 
+    # Load and clean excel income data
     df_in2 = excel_income.copy()
+    salary_tags = ["Gehalt", "Sodexo"]
     df_in2 = (
         df_in2[["Datum", "Art", "Betrag"]]
         .rename(columns={"Datum": "date", "Art": "tag", "Betrag": "amount"})
         .dropna()
     )
     df_in2["date"] = pd.to_datetime(df_in2["date"], format="%d.%m.%Y")
-    df_in2["tag"] = df_in2["tag"].apply(
-        lambda x: "Salary" if x in ["Gehalt", "Sodexo"] else x
-    )
+    df_in2["tag"] = df_in2["tag"].apply(lambda x: "salary" if x in salary_tags else x)
 
     df_income = pd.concat([df_in, df_in2], ignore_index=True)
     assert (
@@ -173,13 +196,20 @@ def combine_incomes(toshl_income, excel_income):
     return df_income
 
 
-def preprocess_cashflow(df: pd.DataFrame) -> pd.DataFrame:
+def transform_cashflow_to_wide_format(
+    df: pd.DataFrame, tag_category_map: Dict
+) -> tuple[pd.DataFrame | None, pd.DataFrame]:
     """
-    Remap tags of input data to custom categories, and change the format of the dataframe in order to
-    easily to computations and plots of the cashflow data.
-    :param df: Dataframe, holding either incomes or expenses (cleaned) and grouped by month (tags as rows)
-    :return: dataframe, where each row consists of cashflow data of of a month, each column represents a
-            custom category
+    Remap tags of input data to custom categories, and change the format of the dataframe from longlist to wide format
+    to easily do computations and plots of the cashflow data.
+    Parameters
+    ----------
+    df: Contains cashflow data as longlist, date, tag are indices, amount is only column
+    tag_category_map: Mapping of custom categories to a list of toshl tags
+
+    Returns
+    -------
+    Dataframe in wide format where each column is a category and date column is index
     """
     # TODO: Use three different checks for this to know what is the issue! AND check why Category is in there now!
     assert (
@@ -189,110 +219,17 @@ def preprocess_cashflow(df: pd.DataFrame) -> pd.DataFrame:
     ), "Dataframe is not grouped by month!"
     ### Define custom categories for all tags of Toshl: Make sure category names differ from tag-names,
     ### otherwise column is dropped and aggregate is wrong
-    category_dict = {
-        "home": ["rent", "insurance", "Miete"],
-        "food_healthy": [
-            "restaurants",
-            "Lebensmittel",
-            "groceries",
-            "Restaurants",
-            "Restaurant Mittag",
-        ],
-        "food_unhealthy": ["Fast Food", "Süßigkeiten"],
-        "alcoholic_drinks": ["alcohol", "Alkohol"],
-        "non-alcoholic_drinks": [
-            "Kaffee und Tee",
-            "Erfrischungsgetränke",
-            "coffee & tea",
-            "soft drinks",
-        ],
-        "travel_vacation": [
-            "sightseeing",
-            "Sightseeing",
-            "Beherbergung",
-            "accommodation",
-            "Urlaub",
-        ],
-        "transportation": [
-            "bus",
-            "Bus",
-            "taxi",
-            "Taxi",
-            "metro",
-            "Metro",
-            "Eisenbahn",
-            "train",
-            "car",
-            "Auto",
-            "parking",
-            "airplane",
-            "fuel",
-            "Flugzeug",
-        ],
-        "sports": [
-            "training",
-            "Training",
-            "MoTu",
-            "Turnier",
-            "sport equipment",
-            "Billard",
-            "Konsum Training",
-        ],
-        "events_leisure_books_abos": [
-            "events",
-            "Events",
-            "adult fun",
-            "Spaß für Erwachsene",
-            "games",
-            "sport venues",
-            "membership fees",
-            "apps",
-            "music",
-            "books",
-        ],
-        "clothes_medicine": [
-            "clothes",
-            "accessories",
-            "cosmetics",
-            "medicine",
-            "hairdresser",
-            "medical services",
-            "medical servies",
-            "shoes",
-        ],
-        "private_devices": [
-            "devices",
-            "bike",
-            "bicycle",
-            "movies & TV",
-            "mobile phone",
-            "home improvement",
-            "internet",
-            "landline phone",
-            "furniture",
-        ],
-        "presents": ["birthday", "X-Mas"],
-        "other": [
-            "wechsel",
-            "income tax",
-            "tuition",
-            "publications",
-            "Spende",
-            "property tax",
-        ],
-        "stocks": ["equity purchase"],
-        #### Income categories
-        "compensation_caution": ["Entschädigung"],
-        "salary": ["Salary", "Gehalt Vorschuss", "Reisekosten", "Inflationsbonus"],
-        "present": ["Geschenk"],
-        "tax_compensation": ["Kirchensteuer Erstattung", "Steuerausgleich"],
-        "investment_profit": ["Investing"],
-    }
-    from functools import reduce
 
-    category_list = reduce(lambda x, y: x + y, category_dict.values())
+    # Create all_category_lists, which is list of category lists from expenses and incomes
+    # Reduce recursively flattens out all lists and results in one list of categories
+    all_category_lists = [
+        cat_list
+        for cat_list in list(tag_category_map["expenses"].values())
+        + list(tag_category_map["income"].values())
+    ]
+    category_list = reduce(lambda x, y: x + y, all_category_lists)
 
-    ### Need another format of the table, fill NaNs with zero and drop level 0 index "amount"
+    ### Create wide format from longlist, fill NaNs with zero and drop level 0 index "amount"
     pivot_init = df.unstack()
     pivot_init.fillna(0, inplace=True)
     pivot_init.columns = pivot_init.columns.droplevel()
@@ -307,22 +244,24 @@ def preprocess_cashflow(df: pd.DataFrame) -> pd.DataFrame:
     else:
         building_upkeep = None
 
-    ### Apply custom category definition to dataframe
     not_categorized = [tag for tag in pivot_init.columns if tag not in category_list]
     assert (
         len(not_categorized) == 0
-    ), "There are some tags, which are not yet categorized: {}".format(not_categorized)
+    ), f"There are some tags, which are not yet categorized: {not_categorized}"
 
+    # Calculate sum per categories and drop corresponding tags
     pivot = pivot_init.copy()
-    for category, tag_list in category_dict.items():
-        tag_list_in_data = list(set(tag_list).intersection(set(pivot.columns)))
-        pivot[category] = pivot[tag_list_in_data].sum(axis=1)
-        pivot.drop(columns=tag_list_in_data, inplace=True)
+    for category, category_tags in tag_category_map.items():
+        category_tags_in_data = list(
+            set(category_tags).intersection(set(pivot.columns))
+        )
+        pivot[category] = pivot[category_tags_in_data].sum(axis=1)
+        pivot.drop(columns=category_tags_in_data, inplace=True)
 
-    ### Keep only categories with non-zero total amount in dataframe
+    ### Keep only categories with non-zero total amount in result
     category_sum = pivot.sum().reset_index()
     nonzero_categories = list(category_sum[category_sum[0] != 0.0]["tag"])
 
     pivot = pivot[nonzero_categories]
 
-    return (building_upkeep, pivot)
+    return building_upkeep, pivot

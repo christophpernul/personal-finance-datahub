@@ -10,6 +10,7 @@
     "relativePath": "cashflow",
     "toshl": {
       "relativePath": "toshl",
+      "configFileName": "toshl_tag_categorization.json",
       "sourceFilePattern": "bilanz_*.csv"
     }
   }

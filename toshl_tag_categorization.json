@@ -1,0 +1,131 @@
+{
+  "expenses": {
+    "home": [
+      "rent",
+      "insurance",
+      "Miete"
+    ],
+    "foodRestaurants": [
+      "restaurants",
+      "Lebensmittel",
+      "groceries",
+      "Restaurants",
+      "Restaurant Mittag"
+    ],
+    "fastFoodAndSweets": [
+      "Fast Food",
+      "Süßigkeiten"
+    ],
+    "alcohol": [
+      "alcohol",
+      "Alkohol"
+    ],
+    "nonAlcoholics": [
+      "Kaffee und Tee",
+      "Erfrischungsgetränke",
+      "coffee & tea",
+      "soft drinks"
+    ],
+    "travelVacation": [
+      "sightseeing",
+      "Sightseeing",
+      "Beherbergung",
+      "accommodation",
+      "vacation"
+    ],
+    "transportation": [
+      "bus",
+      "Bus",
+      "taxi",
+      "Taxi",
+      "bike",
+      "bicycle",
+      "metro",
+      "Metro",
+      "Eisenbahn",
+      "train",
+      "car",
+      "Auto",
+      "parking",
+      "airplane",
+      "fuel",
+      "Flugzeug"
+    ],
+    "sports": [
+      "training",
+      "Training",
+      "MoTu",
+      "Turnier",
+      "sport equipment",
+      "Billard",
+      "Konsum Training",
+      "membership fees"
+    ],
+    "eventsLeisureBooks": [
+      "events",
+      "Events",
+      "adult fun",
+      "Spaß für Erwachsene",
+      "games",
+      "movies & TV",
+      "internet",
+      "mobile phone",
+      "sport venues",
+      "apps",
+      "music",
+      "books"
+    ],
+    "clothesHealth": [
+      "clothes",
+      "accessories",
+      "cosmetics",
+      "medicine",
+      "hairdresser",
+      "medical services",
+      "medical servies",
+      "shoes"
+    ],
+    "privateDevices": [
+      "devices",
+      "home improvement",
+      "landline phone",
+      "furniture"
+    ],
+    "presents": [
+      "birthday",
+      "X-Mas"
+    ],
+    "other": [
+      "wechsel",
+      "income tax",
+      "tuition",
+      "publications",
+      "Spende",
+      "property tax"
+    ],
+    "stocks": [
+      "equity purchase"
+    ]
+  },
+  "income": {
+    "salary": [
+      "salary",
+      "Gehalt Vorschuss",
+      "Reisekosten",
+      "Inflationsbonus"
+    ],
+    "compensationCaution": [
+      "Entschädigung"
+    ],
+    "present": [
+      "Geschenk"
+    ],
+    "taxCompensation": [
+      "Kirchensteuer Erstattung",
+      "Steuerausgleich"
+    ],
+    "investmentProfit": [
+      "Investing"
+    ]
+  }
+}

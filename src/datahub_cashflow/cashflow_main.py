@@ -1,16 +1,16 @@
 from pathlib import Path
 from typing import Dict
-from datahub_library.file_handling_lib import get_datahub_config, save_data, load_data
+from datahub_library.file_handling_lib import get_config_file, save_data, load_data
 from datahub_cashflow.transform.transform_cashflow_data import (
     update_toshl_cashflow,
-    preprocess_cashflow,
+    transform_cashflow_to_wide_format,
     split_cashflow_data,
     cleaning_cashflow,
     combine_incomes,
 )
 
 # General datahub configuration
-DATAHUB_CONFIG: Dict = get_datahub_config()
+DATAHUB_CONFIG: Dict = get_config_file()
 DATAHUB_CONFIG_META: Dict = DATAHUB_CONFIG["datahubMeta"]
 DATAHUB_ROOT_FILEPATH: Path = DATAHUB_CONFIG_META["datahubRootFilepath"]
 DATAHUB_SOURCE_FILEPATH: Path = (
@@ -18,6 +18,9 @@ DATAHUB_SOURCE_FILEPATH: Path = (
 )
 DATAHUB_TRANSFORM_FILEPATH: Path = (
     Path(DATAHUB_ROOT_FILEPATH) / DATAHUB_CONFIG_META["transformLayerName"]
+)
+DATAHUB_APPLICATION_FILEPATH: Path = (
+    Path(DATAHUB_ROOT_FILEPATH) / DATAHUB_CONFIG_META["applicationLayerName"]
 )
 
 # Specific cashflow datahub configuration
@@ -34,12 +37,12 @@ if __name__ == "__main__":
         "sourceFilePattern"
     ]
 
-    filepath_cashflow_output = (
+    filepath_cashflow_transform_output = (
         DATAHUB_TRANSFORM_FILEPATH / DATAHUB_CONFIG_CASHFLOW_META["relativePath"]
     )
 
     stage = "a_00"
-    outpath = filepath_cashflow_output / f"{stage}_cashflow.csv"
+    outpath = filepath_cashflow_transform_output / f"{stage}_cashflow.csv"
     a_00_cashflow = update_toshl_cashflow(
         source_root_path=filepath_toshl_cashflow_source,
         raw_data_filepattern=toshl_raw_data_filepattern,
@@ -57,8 +60,8 @@ if __name__ == "__main__":
 
     # Combine income data from toshl with manual incomes
     stage = "a_10"
-    outpath_incomes = filepath_cashflow_output / f"{stage}_incomes.csv"
-    outpath_expenses = filepath_cashflow_output / f"{stage}_expenses.csv"
+    outpath_incomes = filepath_cashflow_transform_output / f"{stage}_incomes.csv"
+    outpath_expenses = filepath_cashflow_transform_output / f"{stage}_expenses.csv"
 
     a_10_incomes, a_10_expenses = split_cashflow_data(a_01_cashflow)
     a_11_incomes = combine_incomes(a_10_incomes, a_01_incomes)
@@ -72,18 +75,28 @@ if __name__ == "__main__":
     )
 
     # TODO: Simplify preprocessing
-    stage = "a_20"
-    outpath = filepath_cashflow_output / (f"{stage}_" + "incomes.csv")
-    a_20_caution_incomes, a_20_incomes = preprocess_cashflow(a_11_incomes)
+    toshl_tag_categorization = get_config_file(
+        DATAHUB_CONFIG_CASHFLOW_META["toshl"]["configFileName"]
+    )
+    filepath_cashflow_application_output = (
+        DATAHUB_APPLICATION_FILEPATH / DATAHUB_CONFIG_CASHFLOW_META["relativePath"]
+    )
+    stage = "b_00"
+    outpath = filepath_cashflow_application_output / (f"{stage}_" + "incomes.csv")
+    b_00_caution_incomes, b_00_incomes = transform_cashflow_to_wide_format(
+        a_11_incomes, toshl_tag_categorization
+    )
     save_data(
-        data=a_20_incomes,
+        data=b_00_incomes,
         filepath=outpath,
     )
 
-    outpath = filepath_cashflow_output / (f"{stage}_" + "expenses.csv")
-    a_20_caution_expenses, a_20_expenses = preprocess_cashflow(a_10_expenses)
+    outpath = filepath_cashflow_application_output / (f"{stage}_" + "expenses.csv")
+    b_00_caution_expenses, b_00_expenses = transform_cashflow_to_wide_format(
+        a_10_expenses, toshl_tag_categorization
+    )
     save_data(
-        data=a_20_expenses,
+        data=b_00_expenses,
         filepath=outpath,
     )
 

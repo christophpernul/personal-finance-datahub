@@ -5,7 +5,15 @@ from warnings import warn
 from typing import Dict
 
 
-def get_datahub_config(config_file_name: str = "datahub_config.json") -> Dict:
+def load_json(filepath: Path) -> Dict:
+    try:
+        with filepath.open("r", encoding="utf-8") as jfile:
+            return json.load(jfile)
+    except FileNotFoundError as e:
+        raise f"File not found at path: {filepath}"
+
+
+def get_config_file(config_file_name: str = "datahub_config.json") -> Dict:
     """
     Loads the config file used to provide configuration for the datahub.
 
@@ -20,11 +28,11 @@ def get_datahub_config(config_file_name: str = "datahub_config.json") -> Dict:
     for path in Path.cwd().parents:
         config_path: Path = path / config_file_name
         if config_path.is_file():
-            with config_path.open("r") as cfile:
-                config = json.load(cfile)
-            return config
+            return load_json(config_path)
     else:
-        raise FileNotFoundError(f"Config file {config_file_name} not found!")
+        raise FileNotFoundError(
+            f"Config file {config_file_name} not found in parent folders!"
+        )
 
 
 def load_data(
