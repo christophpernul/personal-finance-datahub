@@ -220,13 +220,9 @@ def transform_cashflow_to_wide_format(
     ### Define custom categories for all tags of Toshl: Make sure category names differ from tag-names,
     ### otherwise column is dropped and aggregate is wrong
 
-    # Create all_category_lists, which is list of category lists from expenses and incomes
+    # Create all_category_lists, which is list of category values from custom category map
     # Reduce recursively flattens out all lists and results in one list of categories
-    all_category_lists = [
-        cat_list
-        for cat_list in list(tag_category_map["expenses"].values())
-        + list(tag_category_map["income"].values())
-    ]
+    all_category_lists = [cat_list for cat_list in list(tag_category_map.values())]
     category_list = reduce(lambda x, y: x + y, all_category_lists)
 
     ### Create wide format from longlist, fill NaNs with zero and drop level 0 index "amount"
@@ -256,7 +252,11 @@ def transform_cashflow_to_wide_format(
             set(category_tags).intersection(set(pivot.columns))
         )
         pivot[category] = pivot[category_tags_in_data].sum(axis=1)
-        pivot.drop(columns=category_tags_in_data, inplace=True)
+        # Do not drop the newly created category column in case the custom category has the same name as one of the original ones
+        category_columns_to_drop = list(
+            set(category_tags_in_data).difference(set([category]))
+        )
+        pivot.drop(columns=category_columns_to_drop, inplace=True)
 
     ### Keep only categories with non-zero total amount in result
     category_sum = pivot.sum().reset_index()

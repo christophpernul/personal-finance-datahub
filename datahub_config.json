@@ -1,6 +1,6 @@
 {
   "datahubMeta": {
-    "datahubRootFilepath": "C:/Users/pernulio/Dropbox/Finance/data/datahub",
+    "datahubRootFilepath": "C:/Users/pernulio/SynologyDrive/Finance/data/datahub/",
     "userInputHubName": "userinput",
     "sourceLayerName": "source",
     "transformLayerName": "transform",

@@ -1,39 +1,39 @@
 {
   "expenses": {
-    "home": [
+    "Home": [
       "rent",
       "insurance",
       "Miete"
     ],
-    "foodRestaurants": [
+    "Restaurants": [
       "restaurants",
       "Lebensmittel",
       "groceries",
       "Restaurants",
       "Restaurant Mittag"
     ],
-    "fastFoodAndSweets": [
+    "Fast Food & Sweets": [
       "Fast Food",
       "Süßigkeiten"
     ],
-    "alcohol": [
+    "Alcohol": [
       "alcohol",
       "Alkohol"
     ],
-    "nonAlcoholics": [
+    "non Alcoholics": [
       "Kaffee und Tee",
       "Erfrischungsgetränke",
       "coffee & tea",
       "soft drinks"
     ],
-    "travelVacation": [
+    "Vacation": [
       "sightseeing",
       "Sightseeing",
       "Beherbergung",
       "accommodation",
       "vacation"
     ],
-    "transportation": [
+    "Transportation": [
       "bus",
       "Bus",
       "taxi",
@@ -51,7 +51,7 @@
       "fuel",
       "Flugzeug"
     ],
-    "sports": [
+    "Sports": [
       "training",
       "Training",
       "MoTu",
@@ -61,7 +61,7 @@
       "Konsum Training",
       "membership fees"
     ],
-    "eventsLeisureBooks": [
+    "Events & Leisure": [
       "events",
       "Events",
       "adult fun",
@@ -75,7 +75,7 @@
       "music",
       "books"
     ],
-    "clothesHealth": [
+    "Clothes & Health": [
       "clothes",
       "accessories",
       "cosmetics",
@@ -85,17 +85,17 @@
       "medical servies",
       "shoes"
     ],
-    "privateDevices": [
+    "Devices": [
       "devices",
       "home improvement",
       "landline phone",
       "furniture"
     ],
-    "presents": [
+    "Presents": [
       "birthday",
       "X-Mas"
     ],
-    "other": [
+    "Other": [
       "wechsel",
       "income tax",
       "tuition",
@@ -103,28 +103,29 @@
       "Spende",
       "property tax"
     ],
-    "stocks": [
+    "Stocks": [
       "equity purchase"
     ]
   },
   "income": {
-    "salary": [
+    "Salary": [
       "salary",
       "Gehalt Vorschuss",
-      "Reisekosten",
-      "Inflationsbonus"
+      "Reisekosten"
     ],
-    "compensationCaution": [
+    "Compensation": [
       "Entschädigung"
     ],
-    "present": [
-      "Geschenk"
+    "Present": [
+      "Geschenk",
+      "Billard"
     ],
-    "taxCompensation": [
+    "Tax Compensation": [
       "Kirchensteuer Erstattung",
-      "Steuerausgleich"
+      "Steuerausgleich",
+      "Inflationsbonus"
     ],
-    "investmentProfit": [
+    "Investment Profit": [
       "Investing"
     ]
   }
