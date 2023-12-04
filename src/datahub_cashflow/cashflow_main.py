@@ -42,7 +42,7 @@ if __name__ == "__main__":
     )
 
     stage = "a_00"
-    outpath = filepath_cashflow_transform_output / f"{stage}_cashflow.csv"
+    outpath = filepath_cashflow_transform_output / f"{stage}_full_cashflow.csv"
     a_00_cashflow = update_toshl_cashflow(
         source_root_path=filepath_toshl_cashflow_source,
         raw_data_filepattern=toshl_raw_data_filepattern,
@@ -83,7 +83,7 @@ if __name__ == "__main__":
     )
     stage = "b_00"
     outpath = filepath_cashflow_application_output / (f"{stage}_" + "incomes.csv")
-    b_00_caution_incomes, b_00_incomes = transform_cashflow_to_wide_format(
+    b_00_incomes = transform_cashflow_to_wide_format(
         a_11_incomes, toshl_tag_categorization["income"]
     )
     save_data(
@@ -92,7 +92,7 @@ if __name__ == "__main__":
     )
 
     outpath = filepath_cashflow_application_output / (f"{stage}_" + "expenses.csv")
-    b_00_caution_expenses, b_00_expenses = transform_cashflow_to_wide_format(
+    b_00_expenses = transform_cashflow_to_wide_format(
         a_10_expenses, toshl_tag_categorization["expenses"]
     )
     save_data(

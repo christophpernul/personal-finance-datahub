@@ -64,7 +64,6 @@ def cleaning_cashflow(df: pd.DataFrame) -> pd.DataFrame:
         "tag",
         "amount",
     ]
-    salary_tags = ["Privat", "NHK", "OL"]
 
     expected_input_columns = set(column_name_mapping.keys())
     assert (
@@ -124,11 +123,6 @@ def cleaning_cashflow(df: pd.DataFrame) -> pd.DataFrame:
         "tag",
     ] = "vacation"
 
-    # Combine all kinds of salary tags
-    df_cleaned["tag"] = df_cleaned["tag"].apply(
-        lambda x: "salary" if x in salary_tags else x
-    )
-
     df_cleaned = df_cleaned[output_columns]
     return df_cleaned
 
@@ -177,14 +171,12 @@ def combine_incomes(
 
     # Load and clean excel income data
     df_in2 = excel_income.copy()
-    salary_tags = ["Gehalt", "Sodexo"]
     df_in2 = (
         df_in2[["Datum", "Art", "Betrag"]]
         .rename(columns={"Datum": "date", "Art": "tag", "Betrag": "amount"})
         .dropna()
     )
     df_in2["date"] = pd.to_datetime(df_in2["date"], format="%d.%m.%Y")
-    df_in2["tag"] = df_in2["tag"].apply(lambda x: "salary" if x in salary_tags else x)
 
     df_income = pd.concat([df_in, df_in2], ignore_index=True)
     assert (
@@ -230,16 +222,6 @@ def transform_cashflow_to_wide_format(
     pivot_init.fillna(0, inplace=True)
     pivot_init.columns = pivot_init.columns.droplevel()
 
-    #### Extract expenses and incomes from building-upkeep (caution) when switching flats
-    if "building upkeep" in pivot_init.columns:
-        building_upkeep = pivot_init["building upkeep"]
-        pivot_init.drop(columns=["building upkeep"], inplace=True)
-    elif "Wechsel" in pivot_init.columns:
-        building_upkeep = pivot_init["Wechsel"]
-        pivot_init.drop(columns=["Wechsel"], inplace=True)
-    else:
-        building_upkeep = None
-
     not_categorized = [tag for tag in pivot_init.columns if tag not in category_list]
     assert (
         len(not_categorized) == 0
@@ -264,4 +246,4 @@ def transform_cashflow_to_wide_format(
 
     pivot = pivot[nonzero_categories]
 
-    return building_upkeep, pivot
+    return pivot

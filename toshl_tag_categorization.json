@@ -3,7 +3,8 @@
     "Home": [
       "rent",
       "insurance",
-      "Miete"
+      "Miete",
+      "building upkeep"
     ],
     "Restaurants": [
       "restaurants",
@@ -101,7 +102,8 @@
       "tuition",
       "publications",
       "Spende",
-      "property tax"
+      "property tax",
+      "Kaution"
     ],
     "Stocks": [
       "equity purchase"
@@ -109,12 +111,19 @@
   },
   "income": {
     "Salary": [
+      "Privat",
+      "NHK",
+      "OL",
       "salary",
+      "Gehalt",
+      "Sodexo",
       "Gehalt Vorschuss",
       "Reisekosten"
     ],
     "Compensation": [
-      "Entschädigung"
+      "Entschädigung",
+      "Wechsel",
+      "Kaution"
     ],
     "Present": [
       "Geschenk",
