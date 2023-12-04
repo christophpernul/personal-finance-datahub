@@ -196,21 +196,19 @@ def transform_cashflow_to_wide_format(
     to easily do computations and plots of the cashflow data.
     Parameters
     ----------
-    df: Contains cashflow data as longlist, date, tag are indices, amount is only column
-    tag_category_map: Mapping of custom categories to a list of toshl tags
+    df: Contains cashflow data as longlist, [date, tag] are indices, amount is only column
+    tag_category_map: Mapping of custom categories to a list of toshl tags. Needs to be category map for either income or expenses
 
     Returns
     -------
     Dataframe in wide format where each column is a category and date column is index
     """
-    # TODO: Use three different checks for this to know what is the issue! AND check why Category is in there now!
     assert (
         isinstance(df.index, pd.core.indexes.multi.MultiIndex)
-        and set(df.index.names) == set(["date", "tag"])
+        and set(df.index.names) == {"date", "tag"}
         and list(df.columns) == ["amount"]
-    ), "Dataframe is not grouped by month!"
-    ### Define custom categories for all tags of Toshl: Make sure category names differ from tag-names,
-    ### otherwise column is dropped and aggregate is wrong
+    ), "Dataframe is not grouped by month with a multi-index of [date, tag] and column amount!"
+    ### Define custom categories for all tags of Toshl
 
     # Create all_category_lists, which is list of category values from custom category map
     # Reduce recursively flattens out all lists and results in one list of categories
@@ -236,7 +234,7 @@ def transform_cashflow_to_wide_format(
         pivot[category] = pivot[category_tags_in_data].sum(axis=1)
         # Do not drop the newly created category column in case the custom category has the same name as one of the original ones
         category_columns_to_drop = list(
-            set(category_tags_in_data).difference(set([category]))
+            set(category_tags_in_data).difference({category})
         )
         pivot.drop(columns=category_columns_to_drop, inplace=True)
 
