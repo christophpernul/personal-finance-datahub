@@ -15,7 +15,7 @@ def load_json(filepath: Path) -> Dict:
 
 def get_config_file(config_file_name: str = "datahub_config.json") -> Dict:
     """
-    Loads the config file used to provide configuration for the datahub.
+    Loads a config file used to provide configuration for the datahub.
 
     Parameters
     ----------

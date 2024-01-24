@@ -56,7 +56,7 @@ datahub/
 ## Datahub execution structure
 
 For each domain we create an own datahub module inside the
-`src/datahub/` directory.
+`src/` directory.
 
 ```
 src/

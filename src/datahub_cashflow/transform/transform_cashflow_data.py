@@ -1,15 +1,27 @@
 import pandas as pd
-from pandas import Series, DataFrame
+import logging
 from pathlib import Path
 from functools import reduce
-from typing import Dict, Tuple, Any
 
-from datahub_library.file_handling_lib import load_data, load_json
+from utils.file_io import load_data
+
+logger = logging.getLogger(__name__)
 
 
 def update_toshl_cashflow(
     source_root_path: Path, raw_data_filepattern: str
 ) -> pd.DataFrame:
+    """
+    Iterates over all files in source_root_path and filters for files with raw_data_filepattern.
+    Parameters
+    ----------
+    source_root_path: Path to a folder containing cashflow data from Toshl
+    raw_data_filepattern: filepattern for the files, configured in datahub_config.json
+
+    Returns
+    -------
+
+    """
     raw_data_files: [Path] = sorted(source_root_path.glob(raw_data_filepattern))
     for cnt, raw_file_path in enumerate(raw_data_files):
         df: pd.DataFrame = load_data(raw_file_path)
@@ -20,7 +32,7 @@ def update_toshl_cashflow(
             df_cashflow: pd.DataFrame = df.copy()
         else:
             df_cashflow = pd.concat([df_cashflow, df], ignore_index=True)
-        print(f"File {raw_file_path.name} contains {df.count()[0]} rows.")
+        logger.info(f"File {raw_file_path.name} contains {df.count().iloc[0]} rows.")
     return df_cashflow
 
 
@@ -180,7 +192,7 @@ def combine_incomes(
 
     df_income = pd.concat([df_in, df_in2], ignore_index=True)
     assert (
-        df_income.count()[0] == df_in.count()[0] + df_in2.count()[0]
+        df_income.count().iloc[0] == df_in.count().iloc[0] + df_in2.count().iloc[0]
     ), "Some income rows were lost!"
 
     df_income = df_income.groupby([pd.Grouper(key="date", freq="1M"), "tag"]).sum()
@@ -189,7 +201,7 @@ def combine_incomes(
 
 
 def transform_cashflow_to_wide_format(
-    df: pd.DataFrame, tag_category_map: Dict
+    df: pd.DataFrame, tag_category_map: {}
 ) -> tuple[pd.DataFrame | None, pd.DataFrame]:
     """
     Remap tags of input data to custom categories, and change the format of the dataframe from longlist to wide format
