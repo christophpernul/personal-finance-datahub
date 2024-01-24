@@ -25,7 +25,7 @@ def run_cashflow():
 
     # Update complete cashflow data from Toshl
     stage = "A00"
-    outpath = filepath_target / f"{stage}_cashflow.csv"
+    outpath = filepath_target / f"{stage}_toshl_cashflow.csv"
 
     a_00_cashflow = update_toshl_cashflow(
         source_root_path=filepath_source,
