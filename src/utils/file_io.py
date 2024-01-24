@@ -36,7 +36,10 @@ def get_config_file(config_file_name: str) -> Dict:
 
 
 def load_data(
-    filepath: Path, used_library: str = "pandas", file_type: str = "csv"
+    filepath: Path,
+    used_library: str = "pandas",
+    file_type: str = "csv",
+    sheet_name: str = None,
 ) -> pd.DataFrame | None:
     """
     Loads data from given filepath and given file_extension
@@ -60,7 +63,10 @@ def load_data(
     if used_library == "pandas" and file_type == "csv":
         return pd.read_csv(filepath_or_buffer=filepath)
     elif used_library == "pandas" and file_type == "excel":
-        return pd.read_excel(filepath, engine="odf")
+        if not sheet_name:
+            return pd.read_excel(filepath, engine="odf")
+        else:
+            return pd.read_excel(filepath, sheet_name=sheet_name, engine="odf")
     elif used_library != "pandas":
         warn(
             f"Provided library is not supported yet! Use one of the following: {''.join(implemented_libraries)}"
