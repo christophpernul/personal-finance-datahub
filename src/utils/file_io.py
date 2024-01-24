@@ -13,7 +13,7 @@ def load_json(filepath: Path) -> Dict:
         raise f"File not found at path: {filepath}"
 
 
-def get_config_file(config_file_name: str = "datahub_config.json") -> Dict:
+def get_config_file(config_file_name: str) -> Dict:
     """
     Loads a config file used to provide configuration for the datahub.
 

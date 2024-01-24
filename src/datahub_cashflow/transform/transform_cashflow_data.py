@@ -16,7 +16,7 @@ def update_toshl_cashflow(
     Parameters
     ----------
     source_root_path: Path to a folder containing cashflow data from Toshl
-    raw_data_filepattern: filepattern for the files, configured in datahub_config.json
+    raw_data_filepattern: filepattern for the files
 
     Returns
     -------
