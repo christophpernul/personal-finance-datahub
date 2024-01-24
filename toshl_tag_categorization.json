@@ -1,0 +1,141 @@
+{
+  "expenses": {
+    "Home": [
+      "rent",
+      "insurance",
+      "Miete",
+      "building upkeep"
+    ],
+    "Restaurants": [
+      "restaurants",
+      "Lebensmittel",
+      "groceries",
+      "Restaurants",
+      "Restaurant Mittag"
+    ],
+    "Fast Food & Sweets": [
+      "Fast Food",
+      "Süßigkeiten"
+    ],
+    "Alcohol": [
+      "alcohol",
+      "Alkohol"
+    ],
+    "non Alcoholics": [
+      "Kaffee und Tee",
+      "Erfrischungsgetränke",
+      "coffee & tea",
+      "soft drinks"
+    ],
+    "Vacation": [
+      "sightseeing",
+      "Sightseeing",
+      "Beherbergung",
+      "accommodation",
+      "vacation"
+    ],
+    "Transportation": [
+      "bus",
+      "Bus",
+      "taxi",
+      "Taxi",
+      "bike",
+      "bicycle",
+      "metro",
+      "Metro",
+      "Eisenbahn",
+      "train",
+      "car",
+      "Auto",
+      "parking",
+      "airplane",
+      "fuel",
+      "Flugzeug"
+    ],
+    "Sports": [
+      "training",
+      "Training",
+      "MoTu",
+      "Turnier",
+      "sport equipment",
+      "Billard",
+      "Konsum Training",
+      "membership fees"
+    ],
+    "Events & Leisure": [
+      "events",
+      "Events",
+      "adult fun",
+      "Spaß für Erwachsene",
+      "games",
+      "movies & TV",
+      "internet",
+      "mobile phone",
+      "sport venues",
+      "apps",
+      "music",
+      "books"
+    ],
+    "Clothes & Health": [
+      "clothes",
+      "accessories",
+      "cosmetics",
+      "medicine",
+      "hairdresser",
+      "medical services",
+      "medical servies",
+      "shoes"
+    ],
+    "Devices": [
+      "devices",
+      "home improvement",
+      "landline phone",
+      "furniture"
+    ],
+    "Presents": [
+      "birthday",
+      "X-Mas"
+    ],
+    "Other": [
+      "wechsel",
+      "income tax",
+      "tuition",
+      "publications",
+      "Spende",
+      "property tax",
+      "Kaution"
+    ],
+    "Stocks": [
+      "equity purchase"
+    ]
+  },
+  "income": {
+    "Salary": [
+      "Privat",
+      "NHK",
+      "OL",
+      "salary",
+      "Gehalt",
+      "Sodexo",
+      "Gehalt Vorschuss",
+      "Reisekosten"
+    ],
+    "Compensation": [
+      "Entschädigung",
+      "Wechsel",
+      "Kaution"
+    ],
+    "Present": [
+      "Geschenk",
+      "Billard"
+    ],
+    "Tax Compensation": [
+      "Kirchensteuer Erstattung",
+      "Steuerausgleich",
+      "Inflationsbonus"
+    ],
+    "Investment Profit": [
+      "Investing"
+    ]
+  }
+}

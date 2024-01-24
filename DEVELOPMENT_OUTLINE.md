@@ -33,27 +33,30 @@ The proposed directory structure of the datahub looks like this:
 datahub/
 │
 ├── application/
+│   ├── cashflow/
+│   ├── crypto/
 │   ├── etf/
-│   ├── stocks/
-│   └── cashflow/
+│   └── stocks/
 │
 ├── source/
+│   ├── cashflow/
+│   │   ├── toshl/
+│   │   └── userinput/
+│   ├── crypto/
 │   ├── etf/
-│   ├── stocks/
-│   └── cashflow/
-│       ├── userinput/
-│       └── toshl/
+│   └── stocks/
 │
 └── transform/
+    ├── cashflow/
+    ├── crypto/
     ├── etf/
-    ├── stocks/
-    └── cashflow/
+    └── stocks/
 ```
 
 ## Datahub execution structure
 
 For each domain we create an own datahub module inside the
-`src/datahub/` directory.
+`src/` directory.
 
 ```
 src/
