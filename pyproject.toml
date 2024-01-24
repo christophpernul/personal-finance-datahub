@@ -13,6 +13,8 @@ pathlib = "^1"
 ipykernel = "^6.25.1"
 odfpy = "^1.4.1"
 pre-commit = "^3.4.0"
+yfinance = "^0.2.36"
+investpy = "^1.0.8"
 
 
 [build-system]
