@@ -34,7 +34,18 @@ def initialize_master_data(etf_isins: list, out_path: Path) -> None:
     print(f"Initialized `{out_path}` with {len(etf_info)} entries.")
 
 
-def extract_etf_price_data(etf_isins: list) -> pd.DataFrame:
+def extract_current_etf_price_data(etf_isins: list) -> pd.DataFrame:
     """Extracts historic price data for relevant etfs."""
-
-    return pd.DataFrame()
+    prices = pd.DataFrame(columns=["Date", "Close"])
+    for isin in etf_isins:
+        try:
+            price_isin = yf.Ticker(isin).history(period="1d")
+            price_isin["isin"] = isin
+        except:
+            print(f"Cannot find price data for `{isin}` via yahoo finance!")
+            continue
+        prices = pd.concat(
+            [prices, price_isin[["isin", "Close"]].reset_index()], ignore_index=True
+        )
+    prices.rename(columns={"Close": "price", "Date": "date"})
+    return prices

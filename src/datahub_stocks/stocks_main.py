@@ -4,7 +4,10 @@ from pathlib import Path
 from utils.file_io import get_config_file, save_data, load_data
 from transform.preprocessing import get_valid_etf_list
 from utils.datacleaning import convert_columns_to_timestamp
-from extract.extract_master_data import initialize_master_data
+from extract.extract_master_data import (
+    initialize_master_data,
+    extract_current_etf_price_data,
+)
 
 from constants import DATAHUB_ROOT_FILEPATH
 
@@ -47,7 +50,7 @@ def run_stocks(init: bool = False):
             etf_isins=etf_isin_valid,
             out_path=filepath_source / "source_master_data.csv",
         )
-    etf_prices = extract_etf_price_data(
+    etf_prices = extract_current_etf_price_data(
         etf_isin_valid,
     )
     #
@@ -64,4 +67,4 @@ def run_stocks(init: bool = False):
 
 
 if __name__ == "__main__":
-    run_stocks(init=True)
+    run_stocks()
