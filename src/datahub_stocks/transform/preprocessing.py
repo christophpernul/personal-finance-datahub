@@ -8,7 +8,7 @@ def get_valid_etf_list(
 ) -> list:
     """Extracts a list of valid ISINs from `etf_data` by dropping ISINs, that were
     merged or converted as of `etf_mergers`."""
-    data_isin_column = "ISIN"
+    data_isin_column = "isin"
     merger_isin_column = "isin_old"
     assert (
         data_isin_column in etf_data.columns

@@ -1,3 +1,4 @@
+from datetime import datetime
 import pandas as pd
 import yfinance as yf
 from pathlib import Path
@@ -34,10 +35,10 @@ def initialize_master_data(etf_isins: list, out_path: Path) -> None:
     print(f"Initialized `{out_path}` with {len(etf_info)} entries.")
 
 
-def extract_current_etf_price_data(etf_isins: list) -> pd.DataFrame:
+def extract_current_etf_prices(etfs: list) -> pd.DataFrame:
     """Extracts historic price data for relevant etfs."""
-    prices = pd.DataFrame(columns=["Date", "Close"])
-    for isin in etf_isins:
+    prices = pd.DataFrame(columns=["isin", "Date", "Close"])
+    for isin in etfs:
         try:
             price_isin = yf.Ticker(isin).history(period="1d")
             price_isin["isin"] = isin
@@ -45,7 +46,48 @@ def extract_current_etf_price_data(etf_isins: list) -> pd.DataFrame:
             print(f"Cannot find price data for `{isin}` via yahoo finance!")
             continue
         prices = pd.concat(
-            [prices, price_isin[["isin", "Close"]].reset_index()], ignore_index=True
+            [prices, price_isin[["isin", "Close"]].reset_index()],
+            ignore_index=True,
         )
-    prices.rename(columns={"Close": "price", "Date": "date"})
+    # Returned dataframe from yahoo contains columns Close, and Date after resetting index
+    prices.rename(
+        columns={
+            "Close": "price",
+            "Date": "date",
+        },
+        inplace=True,
+    )
     return prices
+
+
+def extract_historic_etf_prices(etfs: pd.DataFrame) -> pd.DataFrame:
+    """Extracts historic price data for relevant etfs."""
+    current_date = datetime.now()
+    current_date_string = current_date.strftime("%Y-%m-%d")
+
+    symbols = list(etfs["symbol"])
+
+    historic_prices = pd.DataFrame(columns=["date", "isin", "price"])
+    for idx, row in etfs.iterrows():
+        isin = row["isin"]
+        symbol = row["symbol"]
+        try:
+            data = (
+                yf.download(
+                    symbol,
+                    start="2020-01-01",
+                    end=current_date_string,
+                    interval="1mo",
+                )
+                .reset_index()[["Date", "Adj Close"]]
+                .rename(columns={"Date": "date", "Adj Close": "price"})
+            )
+        except:
+            print(f"Cannot find price data for `{isin}` via yahoo finance!")
+            continue
+        data["isin"] = isin
+        historic_prices = pd.concat(
+            [historic_prices, data],
+            ignore_index=True,
+        )
+    return historic_prices

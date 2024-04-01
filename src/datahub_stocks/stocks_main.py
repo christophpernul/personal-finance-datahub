@@ -1,12 +1,13 @@
 import logging
 from pathlib import Path
 
-from utils.file_io import get_config_file, save_data, load_data
-from transform.preprocessing import get_valid_etf_list
+from utils.file_io import save_data, load_data
 from utils.datacleaning import convert_columns_to_timestamp
-from extract.extract_master_data import (
+from datahub_stocks.transform.preprocessing import get_valid_etf_list
+from datahub_stocks.extract.extract_master_data import (
     initialize_master_data,
-    extract_current_etf_price_data,
+    extract_current_etf_prices,
+    extract_historic_etf_prices,
 )
 
 from constants import DATAHUB_ROOT_FILEPATH
@@ -43,18 +44,42 @@ def run_stocks(init: bool = False):
         etf_mergers=etf_mergers,
         clean=True,
     )
+    logger.info(f"Loaded necessary input data for stocks!")
 
     # Extract: Stocks Datahub
+    path_master_data = filepath_source / "source_master_data.csv"
     if init:
         initialize_master_data(
             etf_isins=etf_isin_valid,
-            out_path=filepath_source / "source_master_data.csv",
+            out_path=path_master_data,
         )
-    etf_prices = extract_current_etf_price_data(
-        etf_isin_valid,
+        logger.info(f"Initialized masterdata in {path_master_data}!")
+    master_data = load_data(
+        filepath=path_master_data, used_library="pandas", file_type="csv"
     )
-    #
+
+    # path_current_prices = filepath_source / "source_etf_price_current.csv"
+    # etf_current_prices = extract_current_etf_prices(
+    #     etfs=etf_isin_valid,
+    # )
+    # save_data(
+    #     data=etf_current_prices,
+    #     filepath=path_current_prices,
+    # )
+    # logger.info(f"Updated current price data in {path_current_prices}!")
+
+    path_historic_prices = filepath_source / "source_etf_price_historic.csv"
+    etf_historic_prices = extract_historic_etf_prices(
+        etfs=master_data[["isin", "symbol"]].dropna(),
+    )
+    save_data(
+        data=etf_historic_prices,
+        filepath=path_historic_prices,
+    )
+    logger.info(f"Updated historic price data in {path_historic_prices}!")
+
     # # TRANSFORM: Stocks Datahub
+    # TODO: Map merged ETFs to new ones in portfolio
     # transform_etf_master(
     #     df_etf_master,
     #     df_etf_regionMap,
