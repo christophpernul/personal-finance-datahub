@@ -58,15 +58,15 @@ def run_stocks(init: bool = False):
         filepath=path_master_data, used_library="pandas", file_type="csv"
     )
 
-    # path_current_prices = filepath_source / "source_etf_price_current.csv"
-    # etf_current_prices = extract_current_etf_prices(
-    #     etfs=etf_isin_valid,
-    # )
-    # save_data(
-    #     data=etf_current_prices,
-    #     filepath=path_current_prices,
-    # )
-    # logger.info(f"Updated current price data in {path_current_prices}!")
+    path_current_prices = filepath_source / "source_etf_price_current.csv"
+    etf_current_prices = extract_current_etf_prices(
+        etfs=etf_isin_valid,
+    )
+    save_data(
+        data=etf_current_prices,
+        filepath=path_current_prices,
+    )
+    logger.info(f"Updated current price data in {path_current_prices}!")
 
     path_historic_prices = filepath_source / "source_etf_price_historic.csv"
     etf_historic_prices = extract_historic_etf_prices(

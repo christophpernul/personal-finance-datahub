@@ -1,9 +1,31 @@
-from datetime import datetime
+import json
+from datetime import datetime, date
 import pandas as pd
 import yfinance as yf
 from pathlib import Path
+import requests
 
 from utils.file_io import save_data
+
+
+def fetch_conversion_rate_usdollar_euro(dollar_to_euro=True) -> float:
+    """
+    Uses https://www.finanzen.net to convert US-dollars $ to Euro € and vice versa.
+    :param dollar_to_euro: boolean flag, whether to convert dollars to euro
+    :return: conversion rate
+    """
+    date_today = date.today().strftime(format="%Y-%m-%d")
+    if dollar_to_euro == True:
+        url = f"https://www.finanzen.net/ajax/currencyConverter_Exchangerate/USD/EUR/{date_today}"
+    else:
+        url = f"https://www.finanzen.net/ajax/currencyConverter_Exchangerate/EUR/USD/{date_today}"
+
+    r = requests.post(url)
+    # TODO: Find new API, e.g. https://public.opendatasoft.com/api/explore/v2.1/console
+    # assert r.status_code == requests.codes.ok, "Could not convert $ to €!"
+    conversion = 0.93  # float(json.loads(r.content)[0])
+
+    return conversion
 
 
 def initialize_master_data(etf_isins: list, out_path: Path) -> None:
@@ -57,6 +79,7 @@ def extract_current_etf_prices(etfs: list) -> pd.DataFrame:
         },
         inplace=True,
     )
+    prices["price"] = prices["price"] * fetch_conversion_rate_usdollar_euro()
     return prices
 
 
@@ -90,4 +113,7 @@ def extract_historic_etf_prices(etfs: pd.DataFrame) -> pd.DataFrame:
             [historic_prices, data],
             ignore_index=True,
         )
+    historic_prices["price"] = (
+        historic_prices["price"] * fetch_conversion_rate_usdollar_euro()
+    )
     return historic_prices
