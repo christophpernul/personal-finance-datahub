@@ -41,24 +41,12 @@ def run_cashflow():
     a_01_cashflow = cleaning_cashflow(a_00_cashflow)
     logger.info(f"Cashflow data cleaned!")
 
-    # Load incomes from user input
-    income_source_filepath = (
-        Path(DATAHUB_ROOT_FILEPATH)
-        / "source"
-        / "cashflow"
-        / "userinput"
-        / "source_toshl_income.ods"
-    )
-    a_01_incomes = load_data(income_source_filepath, file_type="excel")
-    logger.info(f"Income from user input loaded.")
-
     # Combine income data from toshl with user input incomes
     stage = "A10"
 
     a_10_incomes, a_10_expenses = split_cashflow_data(a_01_cashflow)
-    a_11_incomes = combine_incomes(a_10_incomes, a_01_incomes)
     save_data(
-        data=a_11_incomes,
+        data=a_10_incomes,
         filepath=filepath_target / f"{stage}_incomes.csv",
     )
     save_data(
@@ -72,7 +60,7 @@ def run_cashflow():
     toshl_tag_categorization = get_config_file(TOSHL_CATEGORY_MAP)
 
     b_00_incomes = transform_cashflow_to_wide_format(
-        a_11_incomes, toshl_tag_categorization["income"]
+        a_10_incomes, toshl_tag_categorization["income"]
     )
     save_data(
         data=b_00_incomes,
