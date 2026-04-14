@@ -104,11 +104,13 @@
       "income tax",
       "tuition",
       "publications",
-      "Spende",
       "property tax",
       "Kaution",
       "toll",
       "Gebühr"
+    ],
+    "Donations": [
+      "Spende"
     ],
     "Stocks": [
       "equity purchase"
