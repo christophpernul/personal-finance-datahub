@@ -60,7 +60,7 @@ def run_stocks(init: bool = False):
 
     path_current_prices = filepath_source / "source_etf_price_current.csv"
     etf_current_prices = extract_current_etf_prices(
-        etfs=etf_isin_valid,
+        etfs=master_data[["isin", "symbol", "currency"]].dropna(subset=["symbol"]),
     )
     save_data(
         data=etf_current_prices,
@@ -70,7 +70,7 @@ def run_stocks(init: bool = False):
 
     path_historic_prices = filepath_source / "source_etf_price_historic.csv"
     etf_historic_prices = extract_historic_etf_prices(
-        etfs=master_data[["isin", "symbol"]].dropna(),
+        etfs=master_data[["isin", "symbol", "currency"]].dropna(subset=["symbol"]),
     )
     save_data(
         data=etf_historic_prices,

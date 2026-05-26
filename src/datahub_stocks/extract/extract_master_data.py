@@ -57,63 +57,117 @@ def initialize_master_data(etf_isins: list, out_path: Path) -> None:
     print(f"Initialized `{out_path}` with {len(etf_info)} entries.")
 
 
-def extract_current_etf_prices(etfs: list) -> pd.DataFrame:
-    """Extracts historic price data for relevant etfs."""
-    prices = pd.DataFrame(columns=["isin", "Date", "Close"])
-    for isin in etfs:
-        try:
-            price_isin = yf.Ticker(isin).history(period="1d")
-            price_isin["isin"] = isin
-        except:
-            print(f"Cannot find price data for `{isin}` via yahoo finance!")
+def _fetch_latest_price(symbol: str) -> float | None:
+    """Return the most recent close for `symbol`, or None if unavailable.
+
+    Tries `fast_info.last_price` first (cheapest call); falls back to the
+    last `Close` from a 5-day history window, which is more robust for
+    ETFs where fast_info is missing or stale.
+    """
+    try:
+        price = yf.Ticker(symbol).fast_info.last_price
+        if price is not None and not pd.isna(price):
+            return float(price)
+    except Exception:
+        pass
+
+    try:
+        hist = yf.Ticker(symbol).history(period="5d", auto_adjust=False)
+        if not hist.empty:
+            return float(hist["Close"].dropna().iloc[-1])
+    except Exception:
+        pass
+
+    return None
+
+
+def extract_current_etf_prices(etfs: pd.DataFrame) -> pd.DataFrame:
+    """Extracts the latest price for each etf via yahoo finance.
+
+    Yahoo's price endpoints accept ticker symbols, not ISINs, so the
+    resolved `symbol` from the master data must be used. Prices quoted
+    in USD are converted to EUR; prices already quoted in EUR (or other
+    currencies) are kept as-is.
+
+    :param etfs: DataFrame with columns `isin`, `symbol`, `currency`.
+    :return: DataFrame with columns `isin`, `date`, `price` (in EUR).
+    """
+    today = date.today()
+    usd_to_eur = fetch_conversion_rate_usdollar_euro()
+
+    rows = []
+    for _, row in etfs.iterrows():
+        isin = row["isin"]
+        symbol = row["symbol"]
+        currency = row.get("currency")
+
+        if not symbol or pd.isna(symbol):
+            print(f"No yahoo symbol available for `{isin}`, skipping.")
             continue
-        prices = pd.concat(
-            [prices, price_isin[["isin", "Close"]].reset_index()],
-            ignore_index=True,
-        )
-    # Returned dataframe from yahoo contains columns Close, and Date after resetting index
-    prices.rename(
-        columns={
-            "Close": "price",
-            "Date": "date",
-        },
-        inplace=True,
-    )
-    prices["price"] = prices["price"] * fetch_conversion_rate_usdollar_euro()
-    return prices
+
+        price = _fetch_latest_price(symbol)
+        if price is None:
+            print(f"Cannot find price data for `{isin}` ({symbol}) via yahoo finance!")
+            continue
+
+        if currency == "USD":
+            price = price * usd_to_eur
+
+        rows.append({"isin": isin, "date": today, "price": price})
+
+    return pd.DataFrame(rows, columns=["isin", "date", "price"])
 
 
 def extract_historic_etf_prices(etfs: pd.DataFrame) -> pd.DataFrame:
-    """Extracts historic price data for relevant etfs."""
-    current_date = datetime.now()
-    current_date_string = current_date.strftime("%Y-%m-%d")
+    """Extracts historic (monthly) price data for relevant etfs.
 
-    symbols = list(etfs["symbol"])
+    Uses `Ticker.history()` which always returns flat (non-multi-indexed)
+    columns, and explicitly disables auto-adjust so the `Close` column
+    is the unadjusted close price. USD-quoted prices are converted to EUR.
 
-    historic_prices = pd.DataFrame(columns=["date", "isin", "price"])
-    for idx, row in etfs.iterrows():
+    :param etfs: DataFrame with columns `isin`, `symbol`, `currency`.
+    :return: DataFrame with columns `date`, `isin`, `price` (in EUR).
+    """
+    current_date_string = datetime.now().strftime("%Y-%m-%d")
+    usd_to_eur = fetch_conversion_rate_usdollar_euro()
+
+    frames = []
+    for _, row in etfs.iterrows():
         isin = row["isin"]
         symbol = row["symbol"]
-        try:
-            data = (
-                yf.download(
-                    symbol,
-                    start="2020-01-01",
-                    end=current_date_string,
-                    interval="1mo",
-                )
-                .reset_index()[["Date", "Adj Close"]]
-                .rename(columns={"Date": "date", "Adj Close": "price"})
-            )
-        except:
-            print(f"Cannot find price data for `{isin}` via yahoo finance!")
+        currency = row.get("currency")
+
+        if not symbol or pd.isna(symbol):
+            print(f"No yahoo symbol available for `{isin}`, skipping.")
             continue
-        data["isin"] = isin
-        historic_prices = pd.concat(
-            [historic_prices, data],
-            ignore_index=True,
+
+        try:
+            data = yf.Ticker(symbol).history(
+                start="2020-01-01",
+                end=current_date_string,
+                interval="1mo",
+                auto_adjust=False,
+            )
+        except Exception as exc:
+            print(
+                f"Cannot find historic data for `{isin}` ({symbol}) via yahoo finance: {exc}"
+            )
+            continue
+
+        if data.empty or "Close" not in data.columns:
+            print(f"No historic data returned for `{isin}` ({symbol}), skipping.")
+            continue
+
+        data = (
+            data.reset_index()[["Date", "Close"]]
+            .rename(columns={"Date": "date", "Close": "price"})
+            .dropna(subset=["price"])
         )
-    historic_prices["price"] = (
-        historic_prices["price"] * fetch_conversion_rate_usdollar_euro()
-    )
-    return historic_prices
+        data["isin"] = isin
+        if currency == "USD":
+            data["price"] = data["price"] * usd_to_eur
+        frames.append(data[["date", "isin", "price"]])
+
+    if not frames:
+        return pd.DataFrame(columns=["date", "isin", "price"])
+    return pd.concat(frames, ignore_index=True)
