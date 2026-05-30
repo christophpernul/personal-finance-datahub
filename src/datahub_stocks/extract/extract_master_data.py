@@ -29,7 +29,10 @@ def fetch_conversion_rate_usdollar_euro(dollar_to_euro=True) -> float:
 
 
 def initialize_master_data(etf_isins: list, out_path: Path) -> None:
-    """Initializes master data scraped from https://finance.yahoo.com for relevant etfs."""
+    """
+    Initializes master data scraped from https://finance.yahoo.com for relevant etfs.
+    Columns distribution, replication, ter, region, etf_type are added manually afterwards!
+    """
     etf_info = []
     for isin in etf_isins:
         try:
