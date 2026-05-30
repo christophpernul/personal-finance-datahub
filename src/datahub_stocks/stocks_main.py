@@ -81,11 +81,9 @@ def run_stocks(init: bool = False):
     logger.info(f"Updated historic price data in {path_historic_prices}!")
 
     portfolio_value = calculate_portfolio_value(
-        etf_shares, etf_current_prices, master_data
+        etf_shares, etf_current_prices, master_data, etf_portfolio
     )
     save_data(portfolio_value, filepath_target / "portfolio_value.csv")
-    total = portfolio_value["value"].sum()
-    logger.info(f"Current portfolio value: {total:.2f} EUR")
 
 
 if __name__ == "__main__":

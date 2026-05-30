@@ -1,8 +1,13 @@
 """Contains preprocessing functionalities for stock and ETF data."""
 
+import logging
+
 import pandas as pd
 
 from utils.datacleaning import convert_columns_to_timestamp
+
+
+logger = logging.getLogger(__name__)
 
 
 PORTFOLIO_REQUIRED_COLUMNS = {
@@ -100,12 +105,21 @@ def aggregate_monthly_shares(portfolio: pd.DataFrame) -> pd.DataFrame:
 
 
 def calculate_portfolio_value(
-    shares: pd.DataFrame, prices: pd.DataFrame, master_data: pd.DataFrame
+    shares: pd.DataFrame,
+    prices: pd.DataFrame,
+    master_data: pd.DataFrame,
+    portfolio: pd.DataFrame,
 ) -> pd.DataFrame:
-    """Joins the latest cumulative holdings with current prices and master data."""
+    """Joins the latest cumulative holdings with current prices and master data,
+    and computes gain/loss against the total invested cost per position."""
     latest_date = shares["date"].max()
     current_holdings = shares[shares["date"] == latest_date].copy()
-    portfolio = current_holdings.merge(
+    total_costs = (
+        portfolio.groupby("isin", as_index=False)["cost"]
+        .sum()
+        .rename(columns={"cost": "total_cost"})
+    )
+    result = current_holdings.merge(
         master_data[
             [
                 "isin",
@@ -119,9 +133,23 @@ def calculate_portfolio_value(
         on="isin",
         how="left",
     )
-    portfolio = portfolio.merge(prices[["isin", "price"]], on="isin", how="left")
-    portfolio["value"] = portfolio["cumulative_shares"] * portfolio["price"]
-    return portfolio[
+    result = result.merge(prices[["isin", "price"]], on="isin", how="left")
+    result = result.merge(total_costs, on="isin", how="left")
+    result["value"] = result["cumulative_shares"] * result["price"]
+    result["value_gained"] = result["value"] - result["total_cost"]
+    result["value_gained_pct"] = (result["value_gained"] / result["total_cost"]) * 100
+
+    total_value = result["value"].sum()
+    invested = result["total_cost"].sum()
+    gained = total_value - invested
+    gained_pct = (gained / invested) * 100 if invested else 0.0
+    logger.info(
+        f"Portfolio value: {total_value:,.2f} EUR "
+        f"(invested: {invested:,.2f} EUR, "
+        f"gained: {gained:,.2f} EUR, {gained_pct:.1f}%)"
+    )
+
+    return result[
         [
             "date",
             "isin",
@@ -132,5 +160,8 @@ def calculate_portfolio_value(
             "cumulative_shares",
             "price",
             "value",
+            "total_cost",
+            "value_gained",
+            "value_gained_pct",
         ]
     ]
