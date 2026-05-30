@@ -1,9 +1,12 @@
 import logging
 from pathlib import Path
 
+import pandas as pd
+
 from utils.file_io import save_data, load_data
 from datahub_stocks.transform.preprocessing import (
     preprocess_portfolio,
+    preprocess_sells,
     preprocess_mergers,
     preprocess_master_data,
     apply_mergers,
@@ -27,12 +30,19 @@ def run_stocks(init: bool = False):
     filepath_target = Path(DATAHUB_ROOT_FILEPATH) / "target" / "stocks"
 
     # Load source-data
-    etf_portfolio = load_data(
+    etf_buys = load_data(
         filepath_source / "source_stocks_portfolio_trades.ods",
         file_type="excel",
         sheet_name="Buys",
     )
-    etf_portfolio = preprocess_portfolio(etf_portfolio)
+    etf_buys = preprocess_portfolio(etf_buys)
+    etf_sells = load_data(
+        filepath_source / "source_stocks_portfolio_trades.ods",
+        file_type="excel",
+        sheet_name="Sells",
+    )
+    etf_sells = preprocess_sells(etf_sells)
+    etf_portfolio = pd.concat([etf_buys, etf_sells], ignore_index=True)
     etf_mergers = load_data(
         filepath_source / "source_stock_mergers.ods",
         file_type="excel",

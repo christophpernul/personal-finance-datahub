@@ -18,6 +18,18 @@ PORTFOLIO_REQUIRED_COLUMNS = {
     "isin",
     "note",
 }
+SELLS_REQUIRED_COLUMNS = {
+    "index",
+    "date",
+    "type",
+    "price",
+    "amount",
+    "cost",
+    "depot",
+    "Anteile",
+    "name",
+    "isin",
+}
 MERGERS_REQUIRED_COLUMNS = {
     "isin_old",
     "isin_new",
@@ -53,6 +65,19 @@ def preprocess_portfolio(data: pd.DataFrame) -> pd.DataFrame:
     if not pd.api.types.is_datetime64_any_dtype(data["date"]):
         data = convert_columns_to_timestamp(data, column_formats={"date": "%d.%m.%Y"})
     data["shares"] = -data["amount"] / data["price"]  # Amount is a cost and is negative
+    return data
+
+
+def preprocess_sells(data: pd.DataFrame) -> pd.DataFrame:
+    """Normalises the Sells sheet so it can be concatenated with Buys before
+    aggregation: shares and cost are negated so cumulative sums reduce holdings
+    and offset the invested cost basis."""
+    _validate_columns(data, SELLS_REQUIRED_COLUMNS, "sells")
+    if not pd.api.types.is_datetime64_any_dtype(data["date"]):
+        data = convert_columns_to_timestamp(data, column_formats={"date": "%d.%m.%Y"})
+    data = data.rename(columns={"Anteile": "shares"})
+    data["shares"] = -data["shares"]
+    data["cost"] = -data["cost"]
     return data
 
 
