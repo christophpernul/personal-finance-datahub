@@ -156,7 +156,7 @@ def split_cashflow_data(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
         needed_columns
     ), "Columns missing! Need: {0}, Have: {1}".format(needed_columns, list(df.columns))
 
-    df_grouped = df.groupby([pd.Grouper(key="date", freq="1M"), "tag"]).sum()
+    df_grouped = df.groupby([pd.Grouper(key="date", freq="ME"), "tag"]).sum()
 
     incomes = df_grouped[df_grouped["amount"] > 0.0].copy()
     expenses = df_grouped[df_grouped["amount"] <= 0.0].copy()
@@ -195,7 +195,7 @@ def combine_incomes(
         df_income.count().iloc[0] == df_in.count().iloc[0] + df_in2.count().iloc[0]
     ), "Some income rows were lost!"
 
-    df_income = df_income.groupby([pd.Grouper(key="date", freq="1M"), "tag"]).sum()
+    df_income = df_income.groupby([pd.Grouper(key="date", freq="ME"), "tag"]).sum()
 
     return df_income
 
@@ -254,6 +254,7 @@ def transform_cashflow_to_wide_format(
     category_sum = pivot.sum().reset_index()
     nonzero_categories = list(category_sum[category_sum[0] != 0.0]["tag"])
 
-    pivot = pivot[nonzero_categories]
+    # Get date from index
+    pivot = pivot[nonzero_categories].reset_index()
 
     return pivot

@@ -1,6 +1,7 @@
 import logging
 
 from datahub_cashflow.cashflow_main import run_cashflow
+from datahub_stocks.stocks_main import run_stocks
 
 console_handler = logging.StreamHandler()
 console_formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
@@ -16,4 +17,5 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 run_cashflow()
+# run_stocks()
 disable_existing_loggers = False

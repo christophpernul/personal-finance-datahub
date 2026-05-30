@@ -24,3 +24,10 @@ datahub/
     ├── crypto/
     └── stocks/
 ```
+
+## Usage
+
+### Cashflow
+
+Running `cashflow_main.py` loads all _toshl_ exports, preprocesses them, and converts the cashflow data into
+income and expenses using custom categorization.
