@@ -5,7 +5,8 @@ from utils.file_io import save_data, load_data
 from datahub_stocks.transform.preprocessing import (
     preprocess_portfolio,
     preprocess_mergers,
-    get_valid_etf_list,
+    apply_mergers,
+    aggregate_monthly_shares,
 )
 from datahub_stocks.extract.extract_master_data import (
     initialize_master_data,
@@ -37,12 +38,12 @@ def run_stocks(init: bool = False):
     etf_mergers = preprocess_mergers(etf_mergers)
     logger.info("Portfolio Data loaded!")
 
-    etf_isin_valid: list = get_valid_etf_list(
-        etf_data=etf_portfolio,
-        etf_mergers=etf_mergers,
-        clean=True,
-    )
-    logger.info(f"Loaded necessary input data for stocks!")
+    # etf_portfolio = apply_mergers(etf_portfolio, etf_mergers)
+    etf_shares = aggregate_monthly_shares(etf_portfolio)
+    save_data(etf_shares, filepath_target / "etf_shares_monthly.csv")
+    logger.info("Monthly share holdings computed and saved!")
+
+    etf_isin_valid = list(set(etf_portfolio["isin"].str.strip()))
 
     # Extract: Stocks Datahub
     path_master_data = filepath_target / "source_master_data.csv"
@@ -75,18 +76,6 @@ def run_stocks(init: bool = False):
         filepath=path_historic_prices,
     )
     logger.info(f"Updated historic price data in {path_historic_prices}!")
-
-    # # TRANSFORM: Stocks Datahub
-    # TODO: Map merged ETFs to new ones in portfolio
-    # transform_etf_master(
-    #     df_etf_master,
-    #     df_etf_regionMap,
-    #     out_path=filepath_etf_master,
-    # )
-    # transform_historization_etf_prices(
-    #     df_etf_prices,
-    #     out_path=filepath_etf_prices,
-    # )
 
 
 if __name__ == "__main__":
