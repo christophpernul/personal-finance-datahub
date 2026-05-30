@@ -1,4 +1,3 @@
-import json
 from datetime import datetime, date
 import pandas as pd
 import yfinance as yf
@@ -7,25 +6,39 @@ import requests
 
 from utils.file_io import save_data
 
+_FRANKFURTER_URL = "https://api.frankfurter.app/latest"
+_FALLBACK_USD_TO_EUR = 0.93
+
 
 def fetch_conversion_rate_usdollar_euro(dollar_to_euro=True) -> float:
     """
-    Uses https://www.finanzen.net to convert US-dollars $ to Euro € and vice versa.
-    :param dollar_to_euro: boolean flag, whether to convert dollars to euro
-    :return: conversion rate
+    Fetches the current USD/EUR exchange rate from api.frankfurter.app (ECB data).
+    Falls back to a hardcoded rate if the request fails.
+    :param dollar_to_euro: if True, returns USD→EUR rate; otherwise EUR→USD.
+    :return: conversion rate as float
     """
-    date_today = date.today().strftime(format="%Y-%m-%d")
-    if dollar_to_euro == True:
-        url = f"https://www.finanzen.net/ajax/currencyConverter_Exchangerate/USD/EUR/{date_today}"
-    else:
-        url = f"https://www.finanzen.net/ajax/currencyConverter_Exchangerate/EUR/USD/{date_today}"
-
-    r = requests.post(url)
-    # TODO: Find new API, e.g. https://public.opendatasoft.com/api/explore/v2.1/console
-    # assert r.status_code == requests.codes.ok, "Could not convert $ to €!"
-    conversion = 0.93  # float(json.loads(r.content)[0])
-
-    return conversion
+    from_currency, to_currency = ("USD", "EUR") if dollar_to_euro else ("EUR", "USD")
+    try:
+        r = requests.get(
+            _FRANKFURTER_URL,
+            params={"from": from_currency, "to": to_currency},
+            timeout=10,
+        )
+        r.raise_for_status()
+        print(
+            f"Fetched {from_currency}/{to_currency} rate from Frankfurter API: {r.json()['rates'][to_currency]}"
+        )
+        return float(r.json()["rates"][to_currency])
+    except Exception:
+        fallback = (
+            _FALLBACK_USD_TO_EUR
+            if dollar_to_euro
+            else round(1 / _FALLBACK_USD_TO_EUR, 6)
+        )
+        print(
+            f"Warning: Could not fetch {from_currency}/{to_currency} rate, using fallback {fallback}."
+        )
+        return fallback
 
 
 def initialize_master_data(etf_isins: list, out_path: Path) -> None:
