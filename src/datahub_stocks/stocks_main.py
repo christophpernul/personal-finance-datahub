@@ -79,4 +79,4 @@ def run_stocks(init: bool = False):
 
 
 if __name__ == "__main__":
-    run_stocks(init=True)
+    run_stocks()
