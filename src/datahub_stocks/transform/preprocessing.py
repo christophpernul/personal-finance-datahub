@@ -28,6 +28,19 @@ MERGERS_REQUIRED_COLUMNS = {
     "stocks_new",
     "date",
 }
+MASTER_DATA_REQUIRED_COLUMNS = {
+    "isin",
+    "name",
+    "symbol",
+    "type",
+    "currency",
+    "distribution",
+    "replication",
+    "ter",
+    "region",
+    "etf_type",
+    "comment",
+}
 
 
 def _validate_columns(data: pd.DataFrame, required: set, table_name: str) -> None:
@@ -47,6 +60,11 @@ def preprocess_mergers(data: pd.DataFrame) -> pd.DataFrame:
     _validate_columns(data, MERGERS_REQUIRED_COLUMNS, "mergers")
     if not pd.api.types.is_datetime64_any_dtype(data["date"]):
         data = convert_columns_to_timestamp(data, column_formats={"date": "%d.%m.%Y"})
+    return data
+
+
+def preprocess_master_data(data: pd.DataFrame) -> pd.DataFrame:
+    _validate_columns(data, MASTER_DATA_REQUIRED_COLUMNS, "master_data")
     return data
 
 
@@ -79,3 +97,40 @@ def aggregate_monthly_shares(portfolio: pd.DataFrame) -> pd.DataFrame:
     result.columns = ["date", "isin", "cumulative_shares"]
     result = result[result["cumulative_shares"] > 0]
     return result
+
+
+def calculate_portfolio_value(
+    shares: pd.DataFrame, prices: pd.DataFrame, master_data: pd.DataFrame
+) -> pd.DataFrame:
+    """Joins the latest cumulative holdings with current prices and master data."""
+    latest_date = shares["date"].max()
+    current_holdings = shares[shares["date"] == latest_date].copy()
+    portfolio = current_holdings.merge(
+        master_data[
+            [
+                "isin",
+                "name",
+                "symbol",
+                "type",
+                "currency",
+                "ter",
+            ]
+        ],
+        on="isin",
+        how="left",
+    )
+    portfolio = portfolio.merge(prices[["isin", "price"]], on="isin", how="left")
+    portfolio["value"] = portfolio["cumulative_shares"] * portfolio["price"]
+    return portfolio[
+        [
+            "date",
+            "isin",
+            "name",
+            "symbol",
+            "type",
+            "currency",
+            "cumulative_shares",
+            "price",
+            "value",
+        ]
+    ]

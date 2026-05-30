@@ -5,8 +5,10 @@ from utils.file_io import save_data, load_data
 from datahub_stocks.transform.preprocessing import (
     preprocess_portfolio,
     preprocess_mergers,
+    preprocess_master_data,
     apply_mergers,
     aggregate_monthly_shares,
+    calculate_portfolio_value,
 )
 from datahub_stocks.extract.extract_master_data import (
     initialize_master_data,
@@ -56,6 +58,7 @@ def run_stocks(init: bool = False):
     master_data = load_data(
         filepath=path_master_data, used_library="pandas", file_type="csv"
     )
+    master_data = preprocess_master_data(master_data)
 
     path_current_prices = filepath_target / "source_etf_price_current.csv"
     etf_current_prices = extract_current_etf_prices(
@@ -76,6 +79,13 @@ def run_stocks(init: bool = False):
         filepath=path_historic_prices,
     )
     logger.info(f"Updated historic price data in {path_historic_prices}!")
+
+    portfolio_value = calculate_portfolio_value(
+        etf_shares, etf_current_prices, master_data
+    )
+    save_data(portfolio_value, filepath_target / "portfolio_value.csv")
+    total = portfolio_value["value"].sum()
+    logger.info(f"Current portfolio value: {total:.2f} EUR")
 
 
 if __name__ == "__main__":
