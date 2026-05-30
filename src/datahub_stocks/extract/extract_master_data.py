@@ -143,7 +143,7 @@ def extract_historic_etf_prices(etfs: pd.DataFrame) -> pd.DataFrame:
 
         try:
             data = yf.Ticker(symbol).history(
-                start="2020-01-01",
+                start="2019-01-01",
                 end=current_date_string,
                 interval="1mo",
                 auto_adjust=False,

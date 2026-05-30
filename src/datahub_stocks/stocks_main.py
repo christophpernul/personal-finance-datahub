@@ -38,8 +38,9 @@ def run_stocks(init: bool = False):
         data=etf_mergers,
         column_formats={"date": "%d.%m.%Y"},
     )
-    logger.info("Data loaded!")
-    etf_isin_valid = get_valid_etf_list(
+    logger.info("Portfolio Data loaded!")
+
+    etf_isin_valid: list = get_valid_etf_list(
         etf_data=etf_portfolio,
         etf_mergers=etf_mergers,
         clean=True,
@@ -47,7 +48,7 @@ def run_stocks(init: bool = False):
     logger.info(f"Loaded necessary input data for stocks!")
 
     # Extract: Stocks Datahub
-    path_master_data = filepath_source / "source_master_data.csv"
+    path_master_data = filepath_target / "source_master_data.csv"
     if init:
         initialize_master_data(
             etf_isins=etf_isin_valid,
@@ -58,9 +59,9 @@ def run_stocks(init: bool = False):
         filepath=path_master_data, used_library="pandas", file_type="csv"
     )
 
-    path_current_prices = filepath_source / "source_etf_price_current.csv"
+    path_current_prices = filepath_target / "source_etf_price_current.csv"
     etf_current_prices = extract_current_etf_prices(
-        etfs=master_data[["isin", "symbol", "currency"]].dropna(subset=["symbol"]),
+        etfs=master_data[["isin", "symbol", "currency"]],
     )
     save_data(
         data=etf_current_prices,
@@ -68,7 +69,7 @@ def run_stocks(init: bool = False):
     )
     logger.info(f"Updated current price data in {path_current_prices}!")
 
-    path_historic_prices = filepath_source / "source_etf_price_historic.csv"
+    path_historic_prices = filepath_target / "source_etf_price_historic.csv"
     etf_historic_prices = extract_historic_etf_prices(
         etfs=master_data[["isin", "symbol", "currency"]].dropna(subset=["symbol"]),
     )
@@ -92,4 +93,4 @@ def run_stocks(init: bool = False):
 
 
 if __name__ == "__main__":
-    run_stocks()
+    run_stocks(init=True)

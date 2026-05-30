@@ -19,5 +19,7 @@ def get_valid_etf_list(
     all_isin = list(set(etf_data[data_isin_column]))
     unvalid_isin = list(set(etf_mergers[merger_isin_column]))
 
+    # TODO: The merged new ETF of column "isin_new" should be added!
+
     valid_isin = [isin for isin in all_isin if isin not in unvalid_isin]
     return [isin.strip() for isin in valid_isin] if clean else valid_isin
