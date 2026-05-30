@@ -2,6 +2,18 @@
 
 import pandas as pd
 
+from utils.datacleaning import convert_columns_to_timestamp
+
+
+def preprocess_portfolio(data: pd.DataFrame) -> pd.DataFrame:
+    data = convert_columns_to_timestamp(data, column_formats={"Datum": "%d.%m.%Y"})
+    return data
+
+
+def preprocess_mergers(data: pd.DataFrame) -> pd.DataFrame:
+    data = convert_columns_to_timestamp(data, column_formats={"date": "%d.%m.%Y"})
+    return data
+
 
 def get_valid_etf_list(
     etf_data: pd.DataFrame, etf_mergers: pd.DataFrame, clean: bool = False

@@ -2,8 +2,11 @@ import logging
 from pathlib import Path
 
 from utils.file_io import save_data, load_data
-from utils.datacleaning import convert_columns_to_timestamp
-from datahub_stocks.transform.preprocessing import get_valid_etf_list
+from datahub_stocks.transform.preprocessing import (
+    preprocess_portfolio,
+    preprocess_mergers,
+    get_valid_etf_list,
+)
 from datahub_stocks.extract.extract_master_data import (
     initialize_master_data,
     extract_current_etf_prices,
@@ -26,18 +29,12 @@ def run_stocks(init: bool = False):
         file_type="excel",
         sheet_name="Buys",
     )
-    etf_portfolio = convert_columns_to_timestamp(
-        data=etf_portfolio,
-        column_formats={"Datum": "%d.%m.%Y"},
-    )
+    etf_portfolio = preprocess_portfolio(etf_portfolio)
     etf_mergers = load_data(
         filepath_source / "source_stock_mergers.ods",
         file_type="excel",
     )
-    etf_mergers = convert_columns_to_timestamp(
-        data=etf_mergers,
-        column_formats={"date": "%d.%m.%Y"},
-    )
+    etf_mergers = preprocess_mergers(etf_mergers)
     logger.info("Portfolio Data loaded!")
 
     etf_isin_valid: list = get_valid_etf_list(
