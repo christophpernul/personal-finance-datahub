@@ -16,6 +16,6 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-run_cashflow()
-# run_stocks()
+# run_cashflow()
+run_stocks()
 disable_existing_loggers = False

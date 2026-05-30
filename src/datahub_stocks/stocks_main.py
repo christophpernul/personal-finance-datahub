@@ -4,6 +4,7 @@ from pathlib import Path
 from utils.file_io import save_data, load_data
 from utils.datacleaning import convert_columns_to_timestamp
 from datahub_stocks.transform.preprocessing import get_valid_etf_list
+from datahub_stocks.transform.portfolio_valuation import calculate_portfolio_value
 from datahub_stocks.extract.extract_master_data import (
     initialize_master_data,
     extract_current_etf_prices,
@@ -78,7 +79,6 @@ def run_stocks(init: bool = False):
     )
     logger.info(f"Updated historic price data in {path_historic_prices}!")
 
-    # # TRANSFORM: Stocks Datahub
     # TODO: Map merged ETFs to new ones in portfolio
     # transform_etf_master(
     #     df_etf_master,
@@ -89,6 +89,16 @@ def run_stocks(init: bool = False):
     #     df_etf_prices,
     #     out_path=filepath_etf_prices,
     # )
+
+    # TRANSFORM: Portfolio valuation
+    portfolio_valuation = calculate_portfolio_value(
+        etf_portfolio=etf_portfolio,
+        etf_current_prices=etf_current_prices,
+        etf_isin_valid=etf_isin_valid,
+    )
+    path_portfolio_valuation = filepath_target / "portfolio_valuation.csv"
+    save_data(data=portfolio_valuation, filepath=path_portfolio_valuation)
+    logger.info(f"Saved portfolio valuation to {path_portfolio_valuation}!")
 
 
 if __name__ == "__main__":
