@@ -3,7 +3,7 @@
 import pandas as pd
 
 
-def clean(data: pd.DataFrame, strip_columns: list) -> pd.DataFrame:
+def strip_vals(data: pd.DataFrame, strip_columns: list) -> pd.DataFrame:
     """
     Clean the values of specified columns in a DataFrame by stripping leading and trailing whitespaces.
 

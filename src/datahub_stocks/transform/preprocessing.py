@@ -1,8 +1,13 @@
 """Contains preprocessing functionalities for stock and ETF data."""
 
+import logging
+
 import pandas as pd
 
-from utils.datacleaning import convert_columns_to_timestamp
+from utils.datacleaning import convert_columns_to_timestamp, strip_vals
+
+
+logger = logging.getLogger(__name__)
 
 
 PORTFOLIO_REQUIRED_COLUMNS = {
@@ -50,9 +55,27 @@ def _validate_columns(data: pd.DataFrame, required: set, table_name: str) -> Non
 
 def preprocess_portfolio(data: pd.DataFrame) -> pd.DataFrame:
     _validate_columns(data, PORTFOLIO_REQUIRED_COLUMNS, "portfolio")
+
     if not pd.api.types.is_datetime64_any_dtype(data["date"]):
         data = convert_columns_to_timestamp(data, column_formats={"date": "%d.%m.%Y"})
-    data["shares"] = -data["amount"] / data["price"]  # Amount is a cost and is negative
+
+    float_cols = ["price", "amount", "cost"]
+    data[float_cols] = data[float_cols].apply(pd.to_numeric, errors="coerce")
+
+    str_cols = [
+        "depot",
+        "comment",
+        "name",
+        "isin",
+        "note",
+        "type",
+    ]
+    data = strip_vals(data, str_cols)
+
+    data["amount"] *= -1  # Amount is a cost and is negative
+    data["cost"] *= -1
+    data["shares"] = data["amount"] / data["price"]
+    data = data.rename(columns={"amount": "total_investment"})
     return data
 
 
@@ -60,11 +83,23 @@ def preprocess_mergers(data: pd.DataFrame) -> pd.DataFrame:
     _validate_columns(data, MERGERS_REQUIRED_COLUMNS, "mergers")
     if not pd.api.types.is_datetime64_any_dtype(data["date"]):
         data = convert_columns_to_timestamp(data, column_formats={"date": "%d.%m.%Y"})
+
+    str_cols = [
+        "isin_new",
+        "isin_old",
+        "name_old",
+        "name_new",
+        "type",
+    ]
+    data = strip_vals(data, str_cols)
     return data
 
 
 def preprocess_master_data(data: pd.DataFrame) -> pd.DataFrame:
     _validate_columns(data, MASTER_DATA_REQUIRED_COLUMNS, "master_data")
+
+    all_cols = list(MASTER_DATA_REQUIRED_COLUMNS.difference({"ter"}))
+    data = strip_vals(data, all_cols)
     return data
 
 
@@ -100,12 +135,21 @@ def aggregate_monthly_shares(portfolio: pd.DataFrame) -> pd.DataFrame:
 
 
 def calculate_portfolio_value(
-    shares: pd.DataFrame, prices: pd.DataFrame, master_data: pd.DataFrame
+    shares: pd.DataFrame,
+    prices: pd.DataFrame,
+    master_data: pd.DataFrame,
+    portfolio: pd.DataFrame,
 ) -> pd.DataFrame:
-    """Joins the latest cumulative holdings with current prices and master data."""
+    """Joins the latest cumulative holdings with current prices and master data,
+    and computes gain/loss against the total invested cost per position."""
     latest_date = shares["date"].max()
     current_holdings = shares[shares["date"] == latest_date].copy()
-    portfolio = current_holdings.merge(
+    total_costs = (
+        portfolio.groupby("isin", as_index=False)[["cost", "total_investment"]]
+        .sum()
+        .rename(columns={"cost": "total_cost"})
+    )
+    result = current_holdings.merge(
         master_data[
             [
                 "isin",
@@ -119,18 +163,41 @@ def calculate_portfolio_value(
         on="isin",
         how="left",
     )
-    portfolio = portfolio.merge(prices[["isin", "price"]], on="isin", how="left")
-    portfolio["value"] = portfolio["cumulative_shares"] * portfolio["price"]
-    return portfolio[
+    result = result.merge(prices[["isin", "price"]], on="isin", how="left")
+    result = result.merge(total_costs, on="isin", how="left")
+    result["value"] = result["cumulative_shares"] * result["price"]
+    result["value_gained"] = (
+        result["value"] - result["total_investment"] - result["total_cost"]
+    )
+    result["value_gained_pct"] = (
+        result["value_gained"] / result["total_investment"]
+    ) * 100
+
+    total_value = result["value"].sum()
+    invested = result["total_investment"].sum()
+    total_costs = result["total_cost"].sum()
+    gained = total_value - invested - total_costs
+    gained_pct = (gained / invested) * 100 if invested else 0.0
+    logger.info(
+        f"Portfolio value: {total_value:,.2f} EUR "
+        f"(invested: {invested:,.2f} EUR, "
+        f"gained: {gained:,.2f} EUR, {gained_pct:.1f}%)"
+    )
+
+    return result[
         [
             "date",
             "isin",
             "name",
-            "symbol",
-            "type",
-            "currency",
             "cumulative_shares",
             "price",
             "value",
+            "total_cost",
+            "total_investment",
+            "value_gained",
+            "value_gained_pct",
+            "symbol",
+            "type",
+            "currency",
         ]
     ]
