@@ -35,6 +35,9 @@ def run_stocks(init: bool = False):
         sheet_name="Buys",
     )
     etf_portfolio = preprocess_portfolio(etf_portfolio)
+    logger.info(
+        f"Portfolio Data loaded and preprocessed! Number of rows: {etf_portfolio.shape[0]}"
+    )
 
     # Load ETF mergers
     etf_mergers = load_data(
@@ -42,7 +45,7 @@ def run_stocks(init: bool = False):
         file_type="excel",
     )
     etf_mergers = preprocess_mergers(etf_mergers)
-    logger.info("Portfolio Data loaded!")
+    logger.info("Mergers Data loaded!")
 
     etf_isin_valid = list(set(etf_portfolio["isin"].str.strip()))
 
@@ -60,6 +63,7 @@ def run_stocks(init: bool = False):
         filepath=path_master_data, used_library="pandas", file_type="csv"
     )
     master_data = preprocess_master_data(master_data)
+    logger.info("ETF Master Data loaded and preprocessed!")
 
     # Extract current ETF price data
     path_current_prices = filepath_target / "source_etf_price_current.csv"

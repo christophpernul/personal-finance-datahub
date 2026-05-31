@@ -55,9 +55,17 @@ def _validate_columns(data: pd.DataFrame, required: set, table_name: str) -> Non
 
 def preprocess_portfolio(data: pd.DataFrame) -> pd.DataFrame:
     _validate_columns(data, PORTFOLIO_REQUIRED_COLUMNS, "portfolio")
+
     if not pd.api.types.is_datetime64_any_dtype(data["date"]):
         data = convert_columns_to_timestamp(data, column_formats={"date": "%d.%m.%Y"})
-    data["shares"] = -data["amount"] / data["price"]  # Amount is a cost and is negative
+
+    float_cols = ["price", "amount", "cost"]
+    data[float_cols] = data[float_cols].apply(pd.to_numeric, errors="coerce")
+
+    data["amount"] *= -1  # Amount is a cost and is negative
+    data["cost"] *= -1
+    data["shares"] = data["amount"] / data["price"]
+    data = data.rename(columns={"amount": "total_investment"})
     return data
 
 
@@ -115,7 +123,7 @@ def calculate_portfolio_value(
     latest_date = shares["date"].max()
     current_holdings = shares[shares["date"] == latest_date].copy()
     total_costs = (
-        portfolio.groupby("isin", as_index=False)["cost"]
+        portfolio.groupby("isin", as_index=False)[["cost", "total_investment"]]
         .sum()
         .rename(columns={"cost": "total_cost"})
     )
@@ -136,12 +144,17 @@ def calculate_portfolio_value(
     result = result.merge(prices[["isin", "price"]], on="isin", how="left")
     result = result.merge(total_costs, on="isin", how="left")
     result["value"] = result["cumulative_shares"] * result["price"]
-    result["value_gained"] = result["value"] - result["total_cost"]
-    result["value_gained_pct"] = (result["value_gained"] / result["total_cost"]) * 100
+    result["value_gained"] = (
+        result["value"] - result["total_investment"] - result["total_cost"]
+    )
+    result["value_gained_pct"] = (
+        result["value_gained"] / result["total_investment"]
+    ) * 100
 
     total_value = result["value"].sum()
-    invested = result["total_cost"].sum()
-    gained = total_value - invested
+    invested = result["total_investment"].sum()
+    total_costs = result["total_cost"].sum()
+    gained = total_value - invested - total_costs
     gained_pct = (gained / invested) * 100 if invested else 0.0
     logger.info(
         f"Portfolio value: {total_value:,.2f} EUR "
@@ -154,14 +167,15 @@ def calculate_portfolio_value(
             "date",
             "isin",
             "name",
-            "symbol",
-            "type",
-            "currency",
             "cumulative_shares",
             "price",
             "value",
             "total_cost",
+            "total_investment",
             "value_gained",
             "value_gained_pct",
+            "symbol",
+            "type",
+            "currency",
         ]
     ]
