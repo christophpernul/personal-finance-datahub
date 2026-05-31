@@ -47,6 +47,8 @@ def load_data(
     ----------
     filepath: Path including filename and file extension
     used_library: Specifies the python library to load data
+    file_type: Specifies the file type of the data to be loaded
+    sheet_name: In case of excel file, specify the sheet name to load. If None, the first sheet will be loaded.
 
     Returns
     -------
@@ -61,7 +63,7 @@ def load_data(
     #     load_func = pd.read_excel
     # TODO: Add polars
     if used_library == "pandas" and file_type == "csv":
-        return pd.read_csv(filepath_or_buffer=filepath)
+        return pd.read_csv(filepath_or_buffer=str(filepath))
     elif used_library == "pandas" and file_type == "excel":
         if not sheet_name:
             return pd.read_excel(filepath, engine="odf")
@@ -89,7 +91,12 @@ def save_data(data: pd.DataFrame, filepath: Path, used_library: str = "pandas") 
     implemented_libraries = "pandas"
     # TODO: Add polars
     if used_library == "pandas":
-        return data.reset_index(drop=True).to_csv(path_or_buf=filepath, index=False)
+        return data.reset_index(drop=True).to_csv(
+            path_or_buf=str(filepath),
+            index=False,
+            decimal=",",
+            sep=";",
+        )
     if used_library != "pandas":
         warn(
             f"Provided library is not supported yet! Use one of the following: {''.join(implemented_libraries)}"
