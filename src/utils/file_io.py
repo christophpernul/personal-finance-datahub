@@ -63,7 +63,7 @@ def load_data(
     #     load_func = pd.read_excel
     # TODO: Add polars
     if used_library == "pandas" and file_type == "csv":
-        return pd.read_csv(filepath_or_buffer=str(filepath))
+        return pd.read_csv(filepath_or_buffer=str(filepath), sep=";", decimal=",")
     elif used_library == "pandas" and file_type == "excel":
         if not sheet_name:
             return pd.read_excel(filepath, engine="odf")
