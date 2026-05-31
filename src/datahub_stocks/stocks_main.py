@@ -35,6 +35,7 @@ def run_stocks(init: bool = False):
         file_type="excel",
         sheet_name="Buys",
     )
+
     etf_buys = preprocess_portfolio(etf_buys)
     etf_sells = load_data(
         filepath_source / "source_stocks_portfolio_trades.ods",
@@ -43,21 +44,19 @@ def run_stocks(init: bool = False):
     )
     etf_sells = preprocess_sells(etf_sells)
     etf_portfolio = pd.concat([etf_buys, etf_sells], ignore_index=True)
+
     etf_mergers = load_data(
         filepath_source / "source_stock_mergers.ods",
         file_type="excel",
     )
     etf_mergers = preprocess_mergers(etf_mergers)
-    logger.info("Portfolio Data loaded!")
-
-    # etf_portfolio = apply_mergers(etf_portfolio, etf_mergers)
-    etf_shares = aggregate_monthly_shares(etf_portfolio)
-    save_data(etf_shares, filepath_target / "etf_shares_monthly.csv")
-    logger.info("Monthly share holdings computed and saved!")
+    logger.info("Mergers Data loaded!")
 
     etf_isin_valid = list(set(etf_portfolio["isin"].str.strip()))
 
-    # Extract: Stocks Datahub
+    ### EXTRACT
+
+    # Load or extract ETF master data
     path_master_data = filepath_target / "source_master_data.csv"
     if init:
         initialize_master_data(
@@ -69,7 +68,9 @@ def run_stocks(init: bool = False):
         filepath=path_master_data, used_library="pandas", file_type="csv"
     )
     master_data = preprocess_master_data(master_data)
+    logger.info("ETF Master Data loaded and preprocessed!")
 
+    # Extract current ETF price data
     path_current_prices = filepath_target / "source_etf_price_current.csv"
     etf_current_prices = extract_current_etf_prices(
         etfs=master_data[["isin", "symbol", "currency"]],
@@ -80,6 +81,7 @@ def run_stocks(init: bool = False):
     )
     logger.info(f"Updated current price data in {path_current_prices}!")
 
+    # Extract historic ETF price data
     path_historic_prices = filepath_target / "source_etf_price_historic.csv"
     etf_historic_prices = extract_historic_etf_prices(
         etfs=master_data[["isin", "symbol", "currency"]].dropna(subset=["symbol"]),
@@ -90,12 +92,19 @@ def run_stocks(init: bool = False):
     )
     logger.info(f"Updated historic price data in {path_historic_prices}!")
 
+    ### TRANSFORM
+
+    # Transform monthly portfolio history to cumulative share holdings per month
+    # etf_portfolio = apply_mergers(etf_portfolio, etf_mergers)
+    etf_shares = aggregate_monthly_shares(etf_portfolio)
+    save_data(etf_shares, filepath_target / "etf_shares_monthly.csv")
+    logger.info("Monthly share holdings computed and saved!")
+
+    # Calculate current portfolio value
     portfolio_value = calculate_portfolio_value(
-        etf_shares, etf_current_prices, master_data
+        etf_shares, etf_current_prices, master_data, etf_portfolio
     )
     save_data(portfolio_value, filepath_target / "portfolio_value.csv")
-    total = portfolio_value["value"].sum()
-    logger.info(f"Current portfolio value: {total:.2f} EUR")
 
 
 if __name__ == "__main__":
