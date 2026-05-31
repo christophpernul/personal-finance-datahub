@@ -29,6 +29,7 @@ SELLS_REQUIRED_COLUMNS = {
     "Anteile",
     "name",
     "isin",
+    "_checkSharesEqualAmountDivPrice",
 }
 MERGERS_REQUIRED_COLUMNS = {
     "isin_old",
