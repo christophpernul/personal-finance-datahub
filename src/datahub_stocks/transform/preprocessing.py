@@ -26,7 +26,7 @@ SELLS_REQUIRED_COLUMNS = {
     "amount",
     "cost",
     "depot",
-    "Anteile",
+    "shares",
     "name",
     "isin",
     "_checkSharesEqualAmountDivPrice",
@@ -76,7 +76,6 @@ def preprocess_sells(data: pd.DataFrame) -> pd.DataFrame:
     _validate_columns(data, SELLS_REQUIRED_COLUMNS, "sells")
     if not pd.api.types.is_datetime64_any_dtype(data["date"]):
         data = convert_columns_to_timestamp(data, column_formats={"date": "%d.%m.%Y"})
-    data = data.rename(columns={"Anteile": "shares"})
     data["shares"] = -data["shares"]
     data["cost"] = -data["cost"]
     return data
