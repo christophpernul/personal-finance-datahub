@@ -4,7 +4,7 @@ import logging
 
 import pandas as pd
 
-from utils.datacleaning import convert_columns_to_timestamp
+from utils.datacleaning import convert_columns_to_timestamp, strip_vals
 
 
 logger = logging.getLogger(__name__)
@@ -62,6 +62,16 @@ def preprocess_portfolio(data: pd.DataFrame) -> pd.DataFrame:
     float_cols = ["price", "amount", "cost"]
     data[float_cols] = data[float_cols].apply(pd.to_numeric, errors="coerce")
 
+    str_cols = [
+        "depot",
+        "comment",
+        "name",
+        "isin",
+        "note",
+        "type",
+    ]
+    data = strip_vals(data, str_cols)
+
     data["amount"] *= -1  # Amount is a cost and is negative
     data["cost"] *= -1
     data["shares"] = data["amount"] / data["price"]
@@ -73,11 +83,23 @@ def preprocess_mergers(data: pd.DataFrame) -> pd.DataFrame:
     _validate_columns(data, MERGERS_REQUIRED_COLUMNS, "mergers")
     if not pd.api.types.is_datetime64_any_dtype(data["date"]):
         data = convert_columns_to_timestamp(data, column_formats={"date": "%d.%m.%Y"})
+
+    str_cols = [
+        "isin_new",
+        "isin_old",
+        "name_old",
+        "name_new",
+        "type",
+    ]
+    data = strip_vals(data, str_cols)
     return data
 
 
 def preprocess_master_data(data: pd.DataFrame) -> pd.DataFrame:
     _validate_columns(data, MASTER_DATA_REQUIRED_COLUMNS, "master_data")
+
+    all_cols = list(MASTER_DATA_REQUIRED_COLUMNS)
+    data = strip_vals(data, all_cols)
     return data
 
 
