@@ -98,7 +98,7 @@ def preprocess_mergers(data: pd.DataFrame) -> pd.DataFrame:
 def preprocess_master_data(data: pd.DataFrame) -> pd.DataFrame:
     _validate_columns(data, MASTER_DATA_REQUIRED_COLUMNS, "master_data")
 
-    all_cols = list(MASTER_DATA_REQUIRED_COLUMNS)
+    all_cols = list(MASTER_DATA_REQUIRED_COLUMNS.difference({"ter"}))
     data = strip_vals(data, all_cols)
     return data
 
