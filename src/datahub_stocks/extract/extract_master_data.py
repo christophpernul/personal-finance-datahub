@@ -56,6 +56,7 @@ def initialize_master_data(etf_isins: list, out_path: Path) -> None:
                 {"isin": isin, "name": "", "symbol": "", "type": "", "currency": ""}
             )
             continue
+        # TODO: distribution (acc. or dist.), region (US, Europe,...) and replication (full, swap) missing
         etf_info.append(
             {
                 "isin": isin,
@@ -63,6 +64,16 @@ def initialize_master_data(etf_isins: list, out_path: Path) -> None:
                 "symbol": info.get("symbol"),
                 "type": info.get("quoteType"),
                 "currency": info.get("currency"),
+                "exchange_name": info.get("fullExchangeName"),
+                "ter": info.get("netExpenseRatio"),
+                "last_close_price": info.get("previousClose"),
+                "reg_market_volume": info.get("regularMarketVolume"),
+                "low_52_week": info.get("fiftyTwoWeekLow"),
+                "high_52_week": info.get("fiftyTwoWeekHigh"),
+                "all_time_low": info.get("allTimeLow"),
+                "all_time_high": info.get("allTimeHigh"),
+                "fifty_day_avg": info.get("fiftyDayAverage"),
+                "two_hundred_day_avg": info.get("twoHundredDayAverage"),
             }
         )
     master_data = pd.DataFrame(etf_info).sort_values(by="name")
@@ -127,6 +138,9 @@ def extract_current_etf_prices(etfs: pd.DataFrame) -> pd.DataFrame:
             continue
 
         if currency == "USD":
+            print(
+                f"Converting price `{price}` for `{isin}` from USD to EUR using rate {usd_to_eur}."
+            )
             price = price * usd_to_eur
 
         rows.append({"isin": isin, "date": today, "price": price})

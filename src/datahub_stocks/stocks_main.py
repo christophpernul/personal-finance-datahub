@@ -5,7 +5,7 @@ import pandas as pd
 
 from utils.file_io import save_data, load_data
 from datahub_stocks.transform.preprocessing import (
-    preprocess_portfolio,
+    preprocess_buys,
     preprocess_sells,
     preprocess_mergers,
     preprocess_master_data,
@@ -36,7 +36,7 @@ def run_stocks(init: bool = False):
         sheet_name="Buys",
     )
 
-    etf_buys = preprocess_portfolio(etf_buys)
+    etf_buys = preprocess_buys(etf_buys)
     etf_sells = load_data(
         filepath_source / "source_stocks_portfolio_trades.ods",
         file_type="excel",
@@ -108,4 +108,4 @@ def run_stocks(init: bool = False):
 
 
 if __name__ == "__main__":
-    run_stocks()
+    run_stocks(init=True)

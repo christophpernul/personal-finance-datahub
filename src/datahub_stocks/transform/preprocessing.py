@@ -52,12 +52,13 @@ MASTER_DATA_REQUIRED_COLUMNS = {
     "symbol",
     "type",
     "currency",
-    "distribution",
-    "replication",
+    # TODO: Update!!
+    # "distribution",
+    # "replication",
     "ter",
-    "region",
-    "etf_type",
-    "comment",
+    # "region",
+    "type",
+    # "comment",
 }
 
 
@@ -66,7 +67,7 @@ def _validate_columns(data: pd.DataFrame, required: set, table_name: str) -> Non
     assert not missing, f"Columns missing in `{table_name}`: {missing}"
 
 
-def preprocess_portfolio(data: pd.DataFrame) -> pd.DataFrame:
+def preprocess_buys(data: pd.DataFrame) -> pd.DataFrame:
     _validate_columns(data, PORTFOLIO_REQUIRED_COLUMNS, "portfolio")
 
     if not pd.api.types.is_datetime64_any_dtype(data["date"]):
@@ -88,19 +89,22 @@ def preprocess_portfolio(data: pd.DataFrame) -> pd.DataFrame:
     data["amount"] *= -1  # Amount is a cost and is negative
     data["cost"] *= -1
     data["shares"] = data["amount"] / data["price"]
-    data = data.rename(columns={"amount": "total_investment"})
+    data = data.rename(columns={"amount": "total_investment"}).drop("price", axis=1)
     return data
 
 
 def preprocess_sells(data: pd.DataFrame) -> pd.DataFrame:
-    """Normalises the Sells sheet so it can be concatenated with Buys before
-    aggregation: shares and cost are negated so cumulative sums reduce holdings
-    and offset the invested cost basis."""
+    """Normalises the Sells sheet such that it can be concatenated with Buys before
+    aggregation: shares and amount are negated so cumulative sums reduce holdings.
+    """
     _validate_columns(data, SELLS_REQUIRED_COLUMNS, "sells")
     if not pd.api.types.is_datetime64_any_dtype(data["date"]):
         data = convert_columns_to_timestamp(data, column_formats={"date": "%d.%m.%Y"})
+
+    # When sold the number of shares and the total amount invested decreases
     data["shares"] = -data["shares"]
-    data["cost"] = -data["cost"]
+    data["amount"] = -data["amount"]
+    data = data.rename(columns={"amount": "total_investment"}).drop("price", axis=1)
     return data
 
 
