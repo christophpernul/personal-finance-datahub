@@ -14,9 +14,9 @@ from datahub_stocks.transform.preprocessing import (
     calculate_portfolio_value,
 )
 from datahub_stocks.extract.extract_master_data import (
-    initialize_master_data,
     extract_current_etf_prices,
     extract_historic_etf_prices,
+    initialize_market_snapshot,
 )
 
 from constants import DATAHUB_ROOT_FILEPATH
@@ -25,7 +25,7 @@ from constants import DATAHUB_ROOT_FILEPATH
 logger = logging.getLogger(__name__)
 
 
-def run_stocks(init: bool = False):
+def run_stocks():
     filepath_source = Path(DATAHUB_ROOT_FILEPATH) / "source" / "stocks"
     filepath_target = Path(DATAHUB_ROOT_FILEPATH) / "target" / "stocks"
 
@@ -52,20 +52,16 @@ def run_stocks(init: bool = False):
     etf_mergers = preprocess_mergers(etf_mergers)
     logger.info("Mergers Data loaded!")
 
-    etf_isin_valid = list(set(etf_portfolio["isin"].str.strip()))
-
     ### EXTRACT
 
-    # Load or extract ETF master data
+    # Load ETF master data (regenerated separately via init_master_data.py)
     path_master_data = filepath_target / "source_master_data.csv"
-    if init:
-        initialize_master_data(
-            etf_isins=etf_isin_valid,
-            out_path=path_master_data,
-        )
-        logger.info(f"Initialized masterdata in {path_master_data}!")
     master_data = load_data(
         filepath=path_master_data, used_library="pandas", file_type="csv"
+    )
+    initialize_market_snapshot(
+        etf_isins=master_data["isin"].dropna().unique().tolist(),
+        out_path=filepath_target / "master_data_market_snapshot.csv",
     )
     master_data = preprocess_master_data(master_data)
     logger.info("ETF Master Data loaded and preprocessed!")
@@ -108,4 +104,4 @@ def run_stocks(init: bool = False):
 
 
 if __name__ == "__main__":
-    run_stocks(init=True)
+    run_stocks()

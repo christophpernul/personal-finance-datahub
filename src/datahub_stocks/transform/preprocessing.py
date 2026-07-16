@@ -52,13 +52,12 @@ MASTER_DATA_REQUIRED_COLUMNS = {
     "symbol",
     "type",
     "currency",
-    # TODO: Update!!
-    # "distribution",
-    # "replication",
+    "distribution",
+    "replication",
     "ter",
-    # "region",
-    "type",
-    # "comment",
+    "region",
+    "etf_type",
+    "comment",
 }
 
 
@@ -127,7 +126,12 @@ def preprocess_mergers(data: pd.DataFrame) -> pd.DataFrame:
 def preprocess_master_data(data: pd.DataFrame) -> pd.DataFrame:
     _validate_columns(data, MASTER_DATA_REQUIRED_COLUMNS, "master_data")
 
-    all_cols = list(MASTER_DATA_REQUIRED_COLUMNS.difference({"ter"}))
+    #     Do not strip columns that have no string data
+    all_cols = list(
+        MASTER_DATA_REQUIRED_COLUMNS.difference(
+            {"ter", "replication", "etf_type", "comment"}
+        )
+    )
     data = strip_vals(data, all_cols)
     return data
 
