@@ -1,4 +1,5 @@
 from datetime import datetime, date
+import re
 import pandas as pd
 import yfinance as yf
 from pathlib import Path
@@ -8,6 +9,31 @@ from utils.file_io import save_data
 
 _FRANKFURTER_URL = "https://api.frankfurter.app/latest"
 _FALLBACK_USD_TO_EUR = 0.93
+
+_ACC_PATTERN = re.compile(
+    r"\b(?:acc|accumulating|1c|thesaurierend)\b|\(c\)",
+    re.IGNORECASE,
+)
+_DIST_PATTERN = re.compile(
+    r"\b(?:dist|distributing|1d|ausschüttend)\b|\(d\)",
+    re.IGNORECASE,
+)
+
+
+def _infer_distribution(name: str) -> str:
+    """Guess whether an ETF is accumulating or distributing from its name.
+
+    European UCITS providers usually encode the distribution policy in the
+    name (`(Acc)`, `1C`, `(Dist)`, `1D`, `Thesaurierend`, ...). Returns an
+    empty string when no marker is found so the user can fill it in manually.
+    """
+    if not name:
+        return ""
+    if _ACC_PATTERN.search(name):
+        return "accumulating"
+    if _DIST_PATTERN.search(name):
+        return "distributing"
+    return ""
 
 
 def fetch_conversion_rate_usdollar_euro(dollar_to_euro=True) -> float:
@@ -42,43 +68,97 @@ def fetch_conversion_rate_usdollar_euro(dollar_to_euro=True) -> float:
 
 
 def initialize_master_data(etf_isins: list, out_path: Path) -> None:
+    """Fetch static ETF attributes from Yahoo Finance and write them to `out_path`.
+
+    Columns `replication`, `etf_type` and `comment` are left empty and must be
+    filled in manually. Rows for ISINs that Yahoo cannot resolve are kept with
+    empty values so the failures stay visible.
     """
-    Initializes master data scraped from https://finance.yahoo.com for relevant etfs.
-    Columns distribution, replication, ter, region, etf_type are added manually afterwards!
-    """
-    etf_info = []
+    rows = []
     for isin in etf_isins:
         try:
             info = yf.Ticker(isin).info
-        except:
+        except Exception:
             print(f"Cannot find `{isin}` via yahoo finance!")
-            etf_info.append(
-                {"isin": isin, "name": "", "symbol": "", "type": "", "currency": ""}
+            rows.append(
+                {
+                    "isin": isin,
+                    "name": "",
+                    "symbol": "",
+                    "type": "",
+                    "currency": "",
+                    "exchange_name": "",
+                    "ter": None,
+                    "region": "",
+                    "distribution": "",
+                    "replication": "",
+                    "etf_type": "",
+                    "comment": "",
+                }
             )
             continue
-        etf_info.append(
+        name = info.get("longName") or info.get("shortName") or ""
+        rows.append(
             {
                 "isin": isin,
-                "name": info.get("longName"),
+                "name": name,
                 "symbol": info.get("symbol"),
                 "type": info.get("quoteType"),
                 "currency": info.get("currency"),
+                "exchange_name": info.get("fullExchangeName"),
+                "ter": info.get("netExpenseRatio"),
+                "region": info.get("region"),
+                "distribution": _infer_distribution(name),
+                "replication": "",
+                "etf_type": "",
+                "comment": "",
             }
         )
-    master_data = pd.DataFrame(etf_info).sort_values(by="name")
-    save_data(
-        data=master_data,
-        filepath=out_path,
-    )
-    print(f"Initialized `{out_path}` with {len(etf_info)} entries.")
+    master_data = pd.DataFrame(rows).sort_values(by="name")
+    save_data(data=master_data, filepath=out_path)
+    print(f"Initialized `{out_path}` with {len(rows)} entries.")
+
+
+def initialize_market_snapshot(etf_isins: list, out_path: Path) -> None:
+    """Fetch a Yahoo market-data snapshot for the given ISINs and write it to
+    `out_path`.
+
+    Captures 52-week highs/lows, all-time highs/lows, moving averages, last
+    close price and regular market volume. Not consumed by the regular
+    pipeline — kept around for later ad-hoc analyses.
+    """
+    rows = []
+    for isin in etf_isins:
+        try:
+            info = yf.Ticker(isin).info
+        except Exception:
+            print(f"Cannot find `{isin}` via yahoo finance!")
+            continue
+        rows.append(
+            {
+                "isin": isin,
+                "last_close_price": info.get("previousClose"),
+                "reg_market_volume": info.get("regularMarketVolume"),
+                "low_52_week": info.get("fiftyTwoWeekLow"),
+                "high_52_week": info.get("fiftyTwoWeekHigh"),
+                "all_time_low": info.get("allTimeLow"),
+                "all_time_high": info.get("allTimeHigh"),
+                "fifty_day_avg": info.get("fiftyDayAverage"),
+                "two_hundred_day_avg": info.get("twoHundredDayAverage"),
+            }
+        )
+    market_data = pd.DataFrame(rows).sort_values(by="isin")
+    save_data(data=market_data, filepath=out_path)
+    print(f"Initialized `{out_path}` with {len(rows)} entries.")
 
 
 def _fetch_latest_price(symbol: str) -> float | None:
     """Return the most recent close for `symbol`, or None if unavailable.
 
-    Tries `fast_info.last_price` first (cheapest call); falls back to the
-    last `Close` from a 5-day history window, which is more robust for
-    ETFs where fast_info is missing or stale.
+    Tries `fast_info.last_price` first (cheapest call), then the last `Close`
+    from a 5-day history window, and finally falls back to the quote-summary
+    endpoint via `Ticker.info` — needed for ETFs listed only on illiquid
+    exchanges (e.g. `.SG`) that Yahoo carries a quote for but no chart bars.
     """
     try:
         price = yf.Ticker(symbol).fast_info.last_price
@@ -91,6 +171,14 @@ def _fetch_latest_price(symbol: str) -> float | None:
         hist = yf.Ticker(symbol).history(period="5d", auto_adjust=False)
         if not hist.empty:
             return float(hist["Close"].dropna().iloc[-1])
+    except Exception:
+        pass
+
+    try:
+        info = yf.Ticker(symbol).info
+        price = info.get("regularMarketPrice") or info.get("previousClose")
+        if price is not None and not pd.isna(price):
+            return float(price)
     except Exception:
         pass
 
@@ -127,6 +215,9 @@ def extract_current_etf_prices(etfs: pd.DataFrame) -> pd.DataFrame:
             continue
 
         if currency == "USD":
+            print(
+                f"Converting price `{price}` for `{isin}` from USD to EUR using rate {usd_to_eur}."
+            )
             price = price * usd_to_eur
 
         rows.append({"isin": isin, "date": today, "price": price})

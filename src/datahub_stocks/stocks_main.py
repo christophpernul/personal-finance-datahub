@@ -1,9 +1,12 @@
 import logging
 from pathlib import Path
 
+import pandas as pd
+
 from utils.file_io import save_data, load_data
 from datahub_stocks.transform.preprocessing import (
-    preprocess_portfolio,
+    preprocess_buys,
+    preprocess_sells,
     preprocess_mergers,
     preprocess_master_data,
     apply_mergers,
@@ -11,9 +14,9 @@ from datahub_stocks.transform.preprocessing import (
     calculate_portfolio_value,
 )
 from datahub_stocks.extract.extract_master_data import (
-    initialize_master_data,
     extract_current_etf_prices,
     extract_historic_etf_prices,
+    initialize_market_snapshot,
 )
 
 from constants import DATAHUB_ROOT_FILEPATH
@@ -22,24 +25,26 @@ from constants import DATAHUB_ROOT_FILEPATH
 logger = logging.getLogger(__name__)
 
 
-def run_stocks(init: bool = False):
+def run_stocks():
     filepath_source = Path(DATAHUB_ROOT_FILEPATH) / "source" / "stocks"
     filepath_target = Path(DATAHUB_ROOT_FILEPATH) / "target" / "stocks"
 
-    ### LOAD
-
-    # Load ETF portfolio buys
-    etf_portfolio = load_data(
+    # Load source-data
+    etf_buys = load_data(
         filepath_source / "source_stocks_portfolio_trades.ods",
         file_type="excel",
         sheet_name="Buys",
     )
-    etf_portfolio = preprocess_portfolio(etf_portfolio)
-    logger.info(
-        f"Portfolio Data loaded and preprocessed! Number of rows: {etf_portfolio.shape[0]}"
-    )
 
-    # Load ETF mergers
+    etf_buys = preprocess_buys(etf_buys)
+    etf_sells = load_data(
+        filepath_source / "source_stocks_portfolio_trades.ods",
+        file_type="excel",
+        sheet_name="Sells",
+    )
+    etf_sells = preprocess_sells(etf_sells)
+    etf_portfolio = pd.concat([etf_buys, etf_sells], ignore_index=True)
+
     etf_mergers = load_data(
         filepath_source / "source_stock_mergers.ods",
         file_type="excel",
@@ -47,20 +52,16 @@ def run_stocks(init: bool = False):
     etf_mergers = preprocess_mergers(etf_mergers)
     logger.info("Mergers Data loaded!")
 
-    etf_isin_valid = list(set(etf_portfolio["isin"].str.strip()))
-
     ### EXTRACT
 
-    # Load or extract ETF master data
+    # Load ETF master data (regenerated separately via init_master_data.py)
     path_master_data = filepath_target / "source_master_data.csv"
-    if init:
-        initialize_master_data(
-            etf_isins=etf_isin_valid,
-            out_path=path_master_data,
-        )
-        logger.info(f"Initialized masterdata in {path_master_data}!")
     master_data = load_data(
         filepath=path_master_data, used_library="pandas", file_type="csv"
+    )
+    initialize_market_snapshot(
+        etf_isins=master_data["isin"].dropna().unique().tolist(),
+        out_path=filepath_target / "master_data_market_snapshot.csv",
     )
     master_data = preprocess_master_data(master_data)
     logger.info("ETF Master Data loaded and preprocessed!")
@@ -90,7 +91,7 @@ def run_stocks(init: bool = False):
     ### TRANSFORM
 
     # Transform monthly portfolio history to cumulative share holdings per month
-    # etf_portfolio = apply_mergers(etf_portfolio, etf_mergers)
+    etf_portfolio = apply_mergers(etf_portfolio, etf_mergers)
     etf_shares = aggregate_monthly_shares(etf_portfolio)
     save_data(etf_shares, filepath_target / "etf_shares_monthly.csv")
     logger.info("Monthly share holdings computed and saved!")
