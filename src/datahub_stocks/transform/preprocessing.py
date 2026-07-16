@@ -120,6 +120,11 @@ def preprocess_mergers(data: pd.DataFrame) -> pd.DataFrame:
         "type",
     ]
     data = strip_vals(data, str_cols)
+
+    for col in ["stocks_old", "stocks_new"]:
+        data[col] = pd.to_numeric(
+            data[col].astype(str).str.strip().str.replace(",", ".", regex=False)
+        )
     return data
 
 

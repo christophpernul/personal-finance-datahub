@@ -91,7 +91,7 @@ def run_stocks():
     ### TRANSFORM
 
     # Transform monthly portfolio history to cumulative share holdings per month
-    # etf_portfolio = apply_mergers(etf_portfolio, etf_mergers)
+    etf_portfolio = apply_mergers(etf_portfolio, etf_mergers)
     etf_shares = aggregate_monthly_shares(etf_portfolio)
     save_data(etf_shares, filepath_target / "etf_shares_monthly.csv")
     logger.info("Monthly share holdings computed and saved!")
