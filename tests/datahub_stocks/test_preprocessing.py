@@ -4,6 +4,7 @@ import pytest
 from src.datahub_stocks.transform.preprocessing import (
     apply_mergers,
     aggregate_monthly_shares,
+    aggregate_monthly_investments,
 )
 
 
@@ -98,3 +99,37 @@ def test_aggregate_monthly_shares_fills_gaps():
     a_rows = result[result["isin"] == "A"].sort_values("date")
     assert len(a_rows) == 3
     assert a_rows["cumulative_shares"].tolist() == [10.0, 10.0, 15.0]
+
+
+@pytest.mark.ut
+def test_aggregate_monthly_investments_sums_per_month():
+    portfolio = pd.DataFrame(
+        {
+            "date": pd.to_datetime(["2024-01-15", "2024-01-20", "2024-03-10"]),
+            "total_investment": [100.0, 50.0, 200.0],
+            "cost": [1.0, 0.5, 2.0],
+        }
+    )
+    result = aggregate_monthly_investments(portfolio)
+    assert result.columns.tolist() == ["date", "portfolio", "order_costs"]
+    jan = result[result["date"] == "2024-01-31"].iloc[0]
+    assert jan["portfolio"] == 150.0
+    assert jan["order_costs"] == 1.5
+    mar = result[result["date"] == "2024-03-31"].iloc[0]
+    assert mar["portfolio"] == 200.0
+    assert mar["order_costs"] == 2.0
+
+
+@pytest.mark.ut
+def test_aggregate_monthly_investments_nets_buys_and_sells():
+    portfolio = pd.DataFrame(
+        {
+            "date": pd.to_datetime(["2024-02-05", "2024-02-25"]),
+            "total_investment": [300.0, -100.0],  # buy then partial sell
+            "cost": [1.0, 2.0],
+        }
+    )
+    result = aggregate_monthly_investments(portfolio)
+    feb = result[result["date"] == "2024-02-29"].iloc[0]
+    assert feb["portfolio"] == 200.0
+    assert feb["order_costs"] == 3.0

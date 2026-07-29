@@ -172,6 +172,25 @@ def aggregate_monthly_shares(portfolio: pd.DataFrame) -> pd.DataFrame:
     return result
 
 
+def aggregate_monthly_investments(portfolio: pd.DataFrame) -> pd.DataFrame:
+    """Aggregates the net invested amount and the order costs per month.
+
+    `total_investment` is positive for buys and negative for sells, so the sum
+    per month is the net cash invested into the portfolio. `cost` holds the
+    order fees (positive for both buys and sells). Dates are the month-end
+    (last day of the month)."""
+    monthly = (
+        portfolio.groupby(pd.Grouper(key="date", freq="ME"))[
+            ["total_investment", "cost"]
+        ]
+        .sum()
+        .reset_index()
+        .rename(columns={"total_investment": "portfolio", "cost": "order_costs"})
+    )
+    monthly["date"] = monthly["date"].dt.strftime("%Y-%m-%d")
+    return monthly[["date", "portfolio", "order_costs"]]
+
+
 def calculate_portfolio_value(
     shares: pd.DataFrame,
     prices: pd.DataFrame,

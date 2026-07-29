@@ -11,6 +11,7 @@ from datahub_stocks.transform.preprocessing import (
     preprocess_master_data,
     apply_mergers,
     aggregate_monthly_shares,
+    aggregate_monthly_investments,
     calculate_portfolio_value,
 )
 from datahub_stocks.extract.extract_master_data import (
@@ -95,6 +96,11 @@ def run_stocks():
     etf_shares = aggregate_monthly_shares(etf_portfolio)
     save_data(etf_shares, filepath_target / "etf_shares_monthly.csv")
     logger.info("Monthly share holdings computed and saved!")
+
+    # Monthly net invested amount and order costs
+    monthly_investments = aggregate_monthly_investments(etf_portfolio)
+    save_data(monthly_investments, filepath_target / "monthly_investments.csv")
+    logger.info("Monthly investments and order costs computed and saved!")
 
     # Calculate current portfolio value
     portfolio_value = calculate_portfolio_value(
