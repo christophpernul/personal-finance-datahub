@@ -88,6 +88,7 @@ def preprocess_buys(data: pd.DataFrame) -> pd.DataFrame:
     data["amount"] *= -1  # Amount is a cost and is negative
     data["cost"] *= -1
     data["shares"] = data["amount"] / data["price"]
+    data["trade_type"] = "buy"
     data = data.rename(columns={"amount": "total_investment"}).drop("price", axis=1)
     return data
 
@@ -103,6 +104,7 @@ def preprocess_sells(data: pd.DataFrame) -> pd.DataFrame:
     # When sold the number of shares and the total amount invested decreases
     data["shares"] = -data["shares"]
     data["amount"] = -data["amount"]
+    data["trade_type"] = "sell"
     data = data.rename(columns={"amount": "total_investment"}).drop("price", axis=1)
     return data
 
@@ -173,22 +175,29 @@ def aggregate_monthly_shares(portfolio: pd.DataFrame) -> pd.DataFrame:
 
 
 def aggregate_monthly_investments(portfolio: pd.DataFrame) -> pd.DataFrame:
-    """Aggregates the net invested amount and the order costs per month.
+    """Aggregates monthly buy expenses, sell income and order costs per month.
 
-    `total_investment` is positive for buys and negative for sells, so the sum
-    per month is the net cash invested into the portfolio. `cost` holds the
-    order fees (positive for both buys and sells). Dates are the month-end
-    (last day of the month)."""
+    `total_investment` is positive for buys and negative for sells, so buys map
+    to `expense_investment` (money invested) and sells to `income_investment`
+    (proceeds, reported as a positive amount). `cost` holds the order fees
+    (positive for both buys and sells) and is summed into `order_costs`. Dates
+    are the month-end (last day of the month)."""
+    portfolio = portfolio.copy()
+    is_buy = portfolio["trade_type"] == "buy"
+    portfolio["expense_investment"] = portfolio["total_investment"].where(is_buy, 0.0)
+    portfolio["income_investment"] = (-portfolio["total_investment"]).where(
+        ~is_buy, 0.0
+    )
     monthly = (
         portfolio.groupby(pd.Grouper(key="date", freq="ME"))[
-            ["total_investment", "cost"]
+            ["expense_investment", "income_investment", "cost"]
         ]
         .sum()
         .reset_index()
-        .rename(columns={"total_investment": "portfolio", "cost": "order_costs"})
+        .rename(columns={"cost": "order_costs"})
     )
     monthly["date"] = monthly["date"].dt.strftime("%Y-%m-%d")
-    return monthly[["date", "portfolio", "order_costs"]]
+    return monthly[["date", "expense_investment", "income_investment", "order_costs"]]
 
 
 def calculate_portfolio_value(

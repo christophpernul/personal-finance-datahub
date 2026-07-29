@@ -106,30 +106,40 @@ def test_aggregate_monthly_investments_sums_per_month():
     portfolio = pd.DataFrame(
         {
             "date": pd.to_datetime(["2024-01-15", "2024-01-20", "2024-03-10"]),
+            "trade_type": ["buy", "buy", "buy"],
             "total_investment": [100.0, 50.0, 200.0],
             "cost": [1.0, 0.5, 2.0],
         }
     )
     result = aggregate_monthly_investments(portfolio)
-    assert result.columns.tolist() == ["date", "portfolio", "order_costs"]
+    assert result.columns.tolist() == [
+        "date",
+        "expense_investment",
+        "income_investment",
+        "order_costs",
+    ]
     jan = result[result["date"] == "2024-01-31"].iloc[0]
-    assert jan["portfolio"] == 150.0
+    assert jan["expense_investment"] == 150.0
+    assert jan["income_investment"] == 0.0
     assert jan["order_costs"] == 1.5
     mar = result[result["date"] == "2024-03-31"].iloc[0]
-    assert mar["portfolio"] == 200.0
+    assert mar["expense_investment"] == 200.0
     assert mar["order_costs"] == 2.0
 
 
 @pytest.mark.ut
-def test_aggregate_monthly_investments_nets_buys_and_sells():
+def test_aggregate_monthly_investments_splits_buys_and_sells():
     portfolio = pd.DataFrame(
         {
             "date": pd.to_datetime(["2024-02-05", "2024-02-25"]),
-            "total_investment": [300.0, -100.0],  # buy then partial sell
+            "trade_type": ["buy", "sell"],
+            # buys are positive, sells negative in total_investment
+            "total_investment": [300.0, -100.0],
             "cost": [1.0, 2.0],
         }
     )
     result = aggregate_monthly_investments(portfolio)
     feb = result[result["date"] == "2024-02-29"].iloc[0]
-    assert feb["portfolio"] == 200.0
-    assert feb["order_costs"] == 3.0
+    assert feb["expense_investment"] == 300.0  # only the buy
+    assert feb["income_investment"] == 100.0  # sell proceeds, positive
+    assert feb["order_costs"] == 3.0  # order costs of both
