@@ -83,33 +83,42 @@ def _monthly_investments_by_date(monthly_investments: pd.DataFrame) -> pd.DataFr
 def add_investment_income(
     incomes_wide: pd.DataFrame, monthly_investments: pd.DataFrame
 ) -> pd.DataFrame:
-    """Adds the monthly `income_investment` (sell proceeds) column from the ETF
-    monthly investments to the wide cashflow income table, matched on month-end
-    date. Incomes are positive, matching the sign of the sell proceeds."""
+    """Adds the monthly investment income (sell proceeds) from the ETF monthly
+    investments to the wide cashflow income table as an `Investment` column,
+    matched on month-end date. Incomes are positive, matching the sign of the
+    sell proceeds.
+
+    The column is added after the tag->category step, so it is intentionally
+    not part of the toshl category mapping."""
     investments = _monthly_investments_by_date(monthly_investments)
+    investments = investments.rename(columns={"income_investment": "Investment"})
     result = incomes_wide.merge(
-        investments[["date", "income_investment"]], on="date", how="left"
+        investments[["date", "Investment"]], on="date", how="left"
     )
-    result["income_investment"] = result["income_investment"].fillna(0.0)
+    result["Investment"] = result["Investment"].fillna(0.0)
     return result
 
 
 def add_investment_expenses(
     expenses_wide: pd.DataFrame, monthly_investments: pd.DataFrame
 ) -> pd.DataFrame:
-    """Adds the monthly `expense_investment` (buys) and `order_costs` columns
-    from the ETF monthly investments to the wide cashflow expense table, matched
-    on month-end date. Both are negated so they follow the expense table's
-    convention of storing outflows as negative amounts."""
+    """Adds the monthly investment expense (buys) as an `Investment` column and
+    the `order_costs` from the ETF monthly investments to the wide cashflow
+    expense table, matched on month-end date. Both are negated so they follow
+    the expense table's convention of storing outflows as negative amounts.
+
+    The columns are added after the tag->category step, so they are
+    intentionally not part of the toshl category mapping."""
     investments = _monthly_investments_by_date(monthly_investments)
     investments["expense_investment"] = -investments["expense_investment"]
     investments["order_costs"] = -investments["order_costs"]
+    investments = investments.rename(columns={"expense_investment": "Investment"})
     result = expenses_wide.merge(
-        investments[["date", "expense_investment", "order_costs"]],
+        investments[["date", "Investment", "order_costs"]],
         on="date",
         how="left",
     )
-    result[["expense_investment", "order_costs"]] = result[
-        ["expense_investment", "order_costs"]
+    result[["Investment", "order_costs"]] = result[
+        ["Investment", "order_costs"]
     ].fillna(0.0)
     return result
