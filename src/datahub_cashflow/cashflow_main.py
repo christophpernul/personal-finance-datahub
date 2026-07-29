@@ -28,28 +28,28 @@ def run_cashflow():
     # Update complete cashflow data from Toshl
     outpath = filepath_transform / "transform_cashflow__toshl_cashflow.csv"
 
-    a_00_cashflow = update_toshl_cashflow(
+    combined_cashflow = update_toshl_cashflow(
         source_root_path=filepath_source,
         raw_data_filepattern=TOSHL_SOURCE_FILEPATTERN,
     )
     save_data(
-        data=a_00_cashflow,
+        data=combined_cashflow,
         filepath=outpath,
     )
     logger.info(f"Complete cashflow written to {outpath}")
 
     # Clean cashflow data
-    a_01_cashflow = cleaning_cashflow(a_00_cashflow)
+    cleaned_cashflow = cleaning_cashflow(combined_cashflow)
     logger.info(f"Cashflow data cleaned!")
 
     # Combine income data from toshl with user input incomes
-    a_10_incomes, a_10_expenses = split_cashflow_data(a_01_cashflow)
+    incomes, expenses = split_cashflow_data(cleaned_cashflow)
     save_data(
-        data=a_10_incomes,
+        data=incomes,
         filepath=filepath_transform / "transform_cashflow__incomes.csv",
     )
     save_data(
-        data=a_10_expenses,
+        data=expenses,
         filepath=filepath_transform / "transform_cashflow__expenses.csv",
     )
     logger.info(f"Combined incomes and expenses saved in {filepath_transform}")
@@ -57,19 +57,19 @@ def run_cashflow():
     # Load toshl categorization and apply conversion to format required by dashboard
     toshl_tag_categorization = get_config_file(TOSHL_CATEGORY_MAP)
 
-    b_00_incomes = transform_cashflow_to_wide_format(
-        a_10_incomes, toshl_tag_categorization["income"]
+    incomes_wide = transform_cashflow_to_wide_format(
+        incomes, toshl_tag_categorization["income"]
     )
     save_data(
-        data=b_00_incomes,
+        data=incomes_wide,
         filepath=filepath_target / "target_cashflow__incomes.csv",
     )
 
-    b_00_expenses = transform_cashflow_to_wide_format(
-        a_10_expenses, toshl_tag_categorization["expenses"]
+    expenses_wide = transform_cashflow_to_wide_format(
+        expenses, toshl_tag_categorization["expenses"]
     )
     save_data(
-        data=b_00_expenses,
+        data=expenses_wide,
         filepath=filepath_target / "target_cashflow__expenses.csv",
     )
     logger.info(
