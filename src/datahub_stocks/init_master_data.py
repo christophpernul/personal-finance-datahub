@@ -2,8 +2,8 @@
 
 Run this only when the set of held ETFs changes (new position added,
 existing position fully closed and no longer relevant, etc.) — the resulting
-`source_master_data.csv` and `master_data_market_snapshot.csv` are otherwise
-read as-is by the regular `stocks_main.run_stocks` pipeline.
+`source_etf__master_data.csv` and `source_etf__market_snapshot.csv` are
+otherwise read as-is by the regular `stocks_main.run_stocks` pipeline.
 
 Usage:
     python -m datahub_stocks.init_master_data
@@ -30,10 +30,10 @@ logger = logging.getLogger(__name__)
 
 
 def init_master_data() -> None:
-    filepath_source = Path(DATAHUB_ROOT_FILEPATH) / "source" / "stocks"
-    filepath_target = Path(DATAHUB_ROOT_FILEPATH) / "target" / "stocks"
+    filepath_source = Path(DATAHUB_ROOT_FILEPATH) / "source"
+    filepath_source_input = filepath_source / "stocks"
 
-    portfolio_path = filepath_source / "source_stocks_portfolio_trades.ods"
+    portfolio_path = filepath_source_input / "source_stocks_portfolio_trades.ods"
     etf_buys = preprocess_buys(
         load_data(portfolio_path, file_type="excel", sheet_name="Buys")
     )
@@ -46,11 +46,11 @@ def init_master_data() -> None:
 
     initialize_master_data(
         etf_isins=etf_isin_valid,
-        out_path=filepath_target / "source_master_data.csv",
+        out_path=filepath_source / "source_etf__master_data.csv",
     )
     initialize_market_snapshot(
         etf_isins=etf_isin_valid,
-        out_path=filepath_target / "master_data_market_snapshot.csv",
+        out_path=filepath_source / "source_etf__market_snapshot.csv",
     )
 
 

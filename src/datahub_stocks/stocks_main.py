@@ -27,19 +27,22 @@ logger = logging.getLogger(__name__)
 
 
 def run_stocks():
-    filepath_source = Path(DATAHUB_ROOT_FILEPATH) / "source" / "stocks"
-    filepath_target = Path(DATAHUB_ROOT_FILEPATH) / "target" / "stocks"
+    root = Path(DATAHUB_ROOT_FILEPATH)
+    filepath_source = root / "source"
+    filepath_transform = root / "transform"
+    # Manually maintained source inputs (.ods) live in the stocks source subfolder
+    filepath_source_input = filepath_source / "stocks"
 
     # Load source-data
     etf_buys = load_data(
-        filepath_source / "source_stocks_portfolio_trades.ods",
+        filepath_source_input / "source_stocks_portfolio_trades.ods",
         file_type="excel",
         sheet_name="Buys",
     )
 
     etf_buys = preprocess_buys(etf_buys)
     etf_sells = load_data(
-        filepath_source / "source_stocks_portfolio_trades.ods",
+        filepath_source_input / "source_stocks_portfolio_trades.ods",
         file_type="excel",
         sheet_name="Sells",
     )
@@ -47,7 +50,7 @@ def run_stocks():
     etf_portfolio = pd.concat([etf_buys, etf_sells], ignore_index=True)
 
     etf_mergers = load_data(
-        filepath_source / "source_stock_mergers.ods",
+        filepath_source_input / "source_stock_mergers.ods",
         file_type="excel",
     )
     etf_mergers = preprocess_mergers(etf_mergers)
@@ -56,19 +59,19 @@ def run_stocks():
     ### EXTRACT
 
     # Load ETF master data (regenerated separately via init_master_data.py)
-    path_master_data = filepath_target / "source_master_data.csv"
+    path_master_data = filepath_source / "source_etf__master_data.csv"
     master_data = load_data(
         filepath=path_master_data, used_library="pandas", file_type="csv"
     )
     initialize_market_snapshot(
         etf_isins=master_data["isin"].dropna().unique().tolist(),
-        out_path=filepath_target / "master_data_market_snapshot.csv",
+        out_path=filepath_source / "source_etf__market_snapshot.csv",
     )
     master_data = preprocess_master_data(master_data)
     logger.info("ETF Master Data loaded and preprocessed!")
 
     # Extract current ETF price data
-    path_current_prices = filepath_target / "source_etf_price_current.csv"
+    path_current_prices = filepath_source / "source_etf__price_current.csv"
     etf_current_prices = extract_current_etf_prices(
         etfs=master_data[["isin", "symbol", "currency"]],
     )
@@ -79,7 +82,7 @@ def run_stocks():
     logger.info(f"Updated current price data in {path_current_prices}!")
 
     # Extract historic ETF price data
-    path_historic_prices = filepath_target / "source_etf_price_historic.csv"
+    path_historic_prices = filepath_source / "source_etf__price_historic.csv"
     etf_historic_prices = extract_historic_etf_prices(
         etfs=master_data[["isin", "symbol", "currency"]].dropna(subset=["symbol"]),
     )
@@ -94,19 +97,24 @@ def run_stocks():
     # Transform monthly portfolio history to cumulative share holdings per month
     etf_portfolio = apply_mergers(etf_portfolio, etf_mergers)
     etf_shares = aggregate_monthly_shares(etf_portfolio)
-    save_data(etf_shares, filepath_target / "etf_shares_monthly.csv")
+    save_data(etf_shares, filepath_transform / "transform_etf__shares_monthly.csv")
     logger.info("Monthly share holdings computed and saved!")
 
     # Monthly net invested amount and order costs
     monthly_investments = aggregate_monthly_investments(etf_portfolio)
-    save_data(monthly_investments, filepath_target / "monthly_investments.csv")
+    save_data(
+        monthly_investments,
+        filepath_transform / "transform_etf__monthly_investments.csv",
+    )
     logger.info("Monthly investments and order costs computed and saved!")
 
     # Calculate current portfolio value
     portfolio_value = calculate_portfolio_value(
         etf_shares, etf_current_prices, master_data, etf_portfolio
     )
-    save_data(portfolio_value, filepath_target / "portfolio_value.csv")
+    save_data(
+        portfolio_value, filepath_transform / "transform_etf__portfolio_value.csv"
+    )
 
 
 if __name__ == "__main__":
