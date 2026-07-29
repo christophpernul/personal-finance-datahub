@@ -19,13 +19,14 @@ logger = logging.getLogger(__name__)
 
 
 def run_cashflow():
-    # Set source and target filepaths
-    filepath_source = Path(DATAHUB_ROOT_FILEPATH) / "source" / "cashflow" / "toshl"
-    filepath_target = Path(DATAHUB_ROOT_FILEPATH) / "target" / "cashflow"
+    # Set stage filepaths (flat folders, <stage>_<type>__<name>.csv convention)
+    root = Path(DATAHUB_ROOT_FILEPATH)
+    filepath_source = root / "source" / "cashflow" / "toshl"
+    filepath_transform = root / "transform"
+    filepath_target = root / "target"
 
     # Update complete cashflow data from Toshl
-    stage = "A00"
-    outpath = filepath_target / f"{stage}_toshl_cashflow.csv"
+    outpath = filepath_transform / "transform_cashflow__toshl_cashflow.csv"
 
     a_00_cashflow = update_toshl_cashflow(
         source_root_path=filepath_source,
@@ -42,21 +43,18 @@ def run_cashflow():
     logger.info(f"Cashflow data cleaned!")
 
     # Combine income data from toshl with user input incomes
-    stage = "A10"
-
     a_10_incomes, a_10_expenses = split_cashflow_data(a_01_cashflow)
     save_data(
         data=a_10_incomes,
-        filepath=filepath_target / f"{stage}_incomes.csv",
+        filepath=filepath_transform / "transform_cashflow__incomes.csv",
     )
     save_data(
         data=a_10_expenses,
-        filepath=filepath_target / f"{stage}_expenses.csv",
+        filepath=filepath_transform / "transform_cashflow__expenses.csv",
     )
-    logger.info(f"Combined incomes and expenses saved in {filepath_target}")
+    logger.info(f"Combined incomes and expenses saved in {filepath_transform}")
 
     # Load toshl categorization and apply conversion to format required by dashboard
-    stage = "B00"
     toshl_tag_categorization = get_config_file(TOSHL_CATEGORY_MAP)
 
     b_00_incomes = transform_cashflow_to_wide_format(
@@ -64,7 +62,7 @@ def run_cashflow():
     )
     save_data(
         data=b_00_incomes,
-        filepath=filepath_target / (f"{stage}_" + "incomes.csv"),
+        filepath=filepath_target / "target_cashflow__incomes.csv",
     )
 
     b_00_expenses = transform_cashflow_to_wide_format(
@@ -72,12 +70,12 @@ def run_cashflow():
     )
     save_data(
         data=b_00_expenses,
-        filepath=filepath_target / (f"{stage}_" + "expenses.csv"),
+        filepath=filepath_target / "target_cashflow__expenses.csv",
     )
     logger.info(
         f"Final cashflow expenses and incomes saved for usage in dashboard in {filepath_target}"
     )
-    test = load_data(filepath=filepath_target / (f"{stage}_" + "expenses.csv"))
+    load_data(filepath=filepath_target / "target_cashflow__expenses.csv")
     logger.info("Cashflow preprocessing finished!")
 
 
