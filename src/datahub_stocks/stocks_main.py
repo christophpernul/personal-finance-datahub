@@ -1,5 +1,4 @@
 import logging
-from pathlib import Path
 
 import pandas as pd
 
@@ -20,29 +19,33 @@ from datahub_stocks.extract.extract_master_data import (
     initialize_market_snapshot,
 )
 
-from constants import DATAHUB_ROOT_FILEPATH
+from constants import (
+    PATH_STOCKS_TRADES,
+    PATH_STOCK_MERGERS,
+    PATH_ETF_MASTER_DATA,
+    PATH_ETF_MARKET_SNAPSHOT,
+    PATH_ETF_PRICE_CURRENT,
+    PATH_ETF_PRICE_HISTORIC,
+    PATH_ETF_SHARES_MONTHLY,
+    PATH_ETF_MONTHLY_INVESTMENTS,
+    PATH_ETF_PORTFOLIO_VALUE,
+)
 
 
 logger = logging.getLogger(__name__)
 
 
 def run_stocks():
-    root = Path(DATAHUB_ROOT_FILEPATH)
-    filepath_source = root / "source"
-    filepath_transform = root / "transform"
-    # Manually maintained source inputs (.ods) live in the stocks source subfolder
-    filepath_source_input = filepath_source / "stocks"
-
     # Load source-data
     etf_buys = load_data(
-        filepath_source_input / "source_stocks_portfolio_trades.ods",
+        PATH_STOCKS_TRADES,
         file_type="excel",
         sheet_name="Buys",
     )
 
     etf_buys = preprocess_buys(etf_buys)
     etf_sells = load_data(
-        filepath_source_input / "source_stocks_portfolio_trades.ods",
+        PATH_STOCKS_TRADES,
         file_type="excel",
         sheet_name="Sells",
     )
@@ -50,7 +53,7 @@ def run_stocks():
     etf_portfolio = pd.concat([etf_buys, etf_sells], ignore_index=True)
 
     etf_mergers = load_data(
-        filepath_source_input / "source_stock_mergers.ods",
+        PATH_STOCK_MERGERS,
         file_type="excel",
     )
     etf_mergers = preprocess_mergers(etf_mergers)
@@ -59,62 +62,54 @@ def run_stocks():
     ### EXTRACT
 
     # Load ETF master data (regenerated separately via init_master_data.py)
-    path_master_data = filepath_source / "source_etf__master_data.csv"
     master_data = load_data(
-        filepath=path_master_data, used_library="pandas", file_type="csv"
+        filepath=PATH_ETF_MASTER_DATA, used_library="pandas", file_type="csv"
     )
     initialize_market_snapshot(
         etf_isins=master_data["isin"].dropna().unique().tolist(),
-        out_path=filepath_source / "source_etf__market_snapshot.csv",
+        out_path=PATH_ETF_MARKET_SNAPSHOT,
     )
     master_data = preprocess_master_data(master_data)
     logger.info("ETF Master Data loaded and preprocessed!")
 
     # Extract current ETF price data
-    path_current_prices = filepath_source / "source_etf__price_current.csv"
     etf_current_prices = extract_current_etf_prices(
         etfs=master_data[["isin", "symbol", "currency"]],
     )
     save_data(
         data=etf_current_prices,
-        filepath=path_current_prices,
+        filepath=PATH_ETF_PRICE_CURRENT,
     )
-    logger.info(f"Updated current price data in {path_current_prices}!")
+    logger.info(f"Updated current price data in {PATH_ETF_PRICE_CURRENT}!")
 
     # Extract historic ETF price data
-    path_historic_prices = filepath_source / "source_etf__price_historic.csv"
     etf_historic_prices = extract_historic_etf_prices(
         etfs=master_data[["isin", "symbol", "currency"]].dropna(subset=["symbol"]),
     )
     save_data(
         data=etf_historic_prices,
-        filepath=path_historic_prices,
+        filepath=PATH_ETF_PRICE_HISTORIC,
     )
-    logger.info(f"Updated historic price data in {path_historic_prices}!")
+    logger.info(f"Updated historic price data in {PATH_ETF_PRICE_HISTORIC}!")
 
     ### TRANSFORM
 
     # Transform monthly portfolio history to cumulative share holdings per month
     etf_portfolio = apply_mergers(etf_portfolio, etf_mergers)
     etf_shares = aggregate_monthly_shares(etf_portfolio)
-    save_data(etf_shares, filepath_transform / "transform_etf__shares_monthly.csv")
+    save_data(etf_shares, PATH_ETF_SHARES_MONTHLY)
     logger.info("Monthly share holdings computed and saved!")
 
     # Monthly net invested amount and order costs
     monthly_investments = aggregate_monthly_investments(etf_portfolio)
-    save_data(
-        monthly_investments,
-        filepath_transform / "transform_etf__monthly_investments.csv",
-    )
+    save_data(monthly_investments, PATH_ETF_MONTHLY_INVESTMENTS)
     logger.info("Monthly investments and order costs computed and saved!")
 
     # Calculate current portfolio value
     portfolio_value = calculate_portfolio_value(
         etf_shares, etf_current_prices, master_data, etf_portfolio
     )
-    save_data(
-        portfolio_value, filepath_transform / "transform_etf__portfolio_value.csv"
-    )
+    save_data(portfolio_value, PATH_ETF_PORTFOLIO_VALUE)
 
 
 if __name__ == "__main__":
