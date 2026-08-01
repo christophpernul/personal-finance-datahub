@@ -7,6 +7,9 @@ from src.datahub_stocks.transform.preprocessing import (
     aggregate_monthly_investments,
     preprocess_dividends,
     aggregate_monthly_dividends,
+    preprocess_stock_trades,
+    combine_portfolio_values,
+    apply_splits,
 )
 
 
@@ -230,3 +233,142 @@ def test_aggregate_monthly_dividends_combines_etf_and_stocks(
     assert round(result["dividend"].sum(), 2) == round(
         dividends_raw["Betrag"].sum() + stock_dividends_raw["Betrag"].sum(), 2
     )
+
+
+@pytest.fixture
+def stock_trades_raw():
+    # German-headed stock Buys/Sells layout: no ISIN, no explicit shares column
+    return pd.DataFrame(
+        {
+            "Datum": ["7.1.2020", "6.6.2022"],
+            "Art": ["Aktien", "Put Option"],
+            "Kurs": [40.65, 3.25],
+            "Betrag": [203.25, 227.50],
+            "Kosten": [1.0, 6.4],
+            "Name": ["Coca Cola", "S&P500 Put"],
+            "ISIN": [float("nan"), float("nan")],
+        }
+    )
+
+
+@pytest.mark.ut
+def test_preprocess_stock_trades_buy_signs(stock_trades_raw):
+    result = preprocess_stock_trades(stock_trades_raw, is_buy=True)
+    # the security name is used as the ISIN identifier
+    assert result["isin"].tolist() == ["Coca Cola", "S&P500 Put"]
+    # buys keep the trade kind for later filtering
+    assert result["type"].tolist() == ["Aktien", "Put Option"]
+    coke = result[result["name"] == "Coca Cola"].iloc[0]
+    assert coke["shares"] == pytest.approx(203.25 / 40.65)  # 5 shares
+    assert coke["total_investment"] == 203.25  # positive money invested
+    assert coke["cost"] == 1.0  # order fees stay positive
+    assert coke["trade_type"] == "buy"
+
+
+@pytest.mark.ut
+def test_preprocess_stock_trades_sell_signs(stock_trades_raw):
+    result = preprocess_stock_trades(stock_trades_raw, is_buy=False)
+    coke = result[result["name"] == "Coca Cola"].iloc[0]
+    # sells reduce holdings and the net invested amount
+    assert coke["shares"] == pytest.approx(-203.25 / 40.65)
+    assert coke["total_investment"] == -203.25
+    assert coke["cost"] == 1.0
+    assert coke["trade_type"] == "sell"
+
+
+@pytest.mark.ut
+def test_preprocess_stock_trades_feeds_shares_and_investments(stock_trades_raw):
+    # the output plugs straight into the ISIN-keyed aggregations
+    portfolio = preprocess_stock_trades(stock_trades_raw, is_buy=True)
+    portfolio = portfolio[portfolio["type"] == "Aktien"]
+    shares = aggregate_monthly_shares(portfolio)
+    assert shares[shares["isin"] == "Coca Cola"]["cumulative_shares"].iloc[
+        0
+    ] == pytest.approx(5.0)
+
+    put = preprocess_stock_trades(stock_trades_raw, is_buy=True)
+    put = put[put["type"] == "Put Option"]
+    investments = aggregate_monthly_investments(put)
+    jun = investments[investments["expense_investment"] != 0].iloc[0]
+    assert jun["expense_investment"] == 227.50
+    assert jun["order_costs"] == 6.4
+
+
+@pytest.mark.ut
+def test_combine_portfolio_values_tags_security_type():
+    etf = pd.DataFrame({"isin": ["IE1"], "name": ["ETF A"], "value": [100.0]})
+    stock = pd.DataFrame(
+        {"isin": ["Coca Cola"], "name": ["Coca Cola"], "value": [50.0]}
+    )
+    result = combine_portfolio_values(etf, stock)
+    assert result["security_type"].tolist() == ["ETF", "Aktie"]
+    assert len(result) == 2
+
+
+@pytest.mark.ut
+def test_preprocess_stock_trades_rounds_shares_to_integers():
+    # 2.0129 shares (amount/price) must round to a whole share
+    raw = pd.DataFrame(
+        {
+            "Datum": ["8.3.2021"],
+            "Art": ["Aktien"],
+            "Kurs": [77.50],
+            "Betrag": [156.0],
+            "Kosten": [1.0],
+            "Name": ["BioNTech"],
+            "ISIN": [float("nan")],
+        }
+    )
+    result = preprocess_stock_trades(raw, is_buy=True)
+    assert result["shares"].iloc[0] == 2.0
+
+
+@pytest.fixture
+def tesla_portfolio():
+    # mirrors the real Tesla trades around the 1-to-3 split on 25.8.2022
+    return pd.DataFrame(
+        {
+            "date": pd.to_datetime(["2022-06-06", "2022-12-06", "2022-12-12"]),
+            "name": ["Tesla", "Tesla", "Tesla"],
+            "isin": ["Tesla", "Tesla", "Tesla"],
+            "shares": [1.0, -3.0, 3.0],  # buy pre-split, sell, buy (post-split)
+        }
+    )
+
+
+@pytest.fixture
+def tesla_split():
+    return pd.DataFrame(
+        {
+            "name": ["Tesla"],
+            "date": pd.to_datetime(["2022-08-25"]),
+            "split_from": [1.0],
+            "split_to": [3.0],
+        }
+    )
+
+
+@pytest.mark.ut
+def test_apply_splits_rebases_only_pre_split_shares(tesla_portfolio, tesla_split):
+    result = apply_splits(tesla_portfolio, tesla_split)
+    shares_by_date = result.set_index("date")["shares"]
+    # pre-split buy is multiplied by 3, post-split trades stay unchanged
+    assert shares_by_date[pd.Timestamp("2022-06-06")] == 3.0
+    assert shares_by_date[pd.Timestamp("2022-12-06")] == -3.0
+    assert shares_by_date[pd.Timestamp("2022-12-12")] == 3.0
+    # net current holding after the split is 3 shares
+    assert result["shares"].sum() == 3.0
+
+
+@pytest.mark.ut
+def test_apply_splits_ignores_other_securities(tesla_split):
+    portfolio = pd.DataFrame(
+        {
+            "date": pd.to_datetime(["2022-06-06"]),
+            "name": ["Coca Cola"],
+            "isin": ["Coca Cola"],
+            "shares": [5.0],
+        }
+    )
+    result = apply_splits(portfolio, tesla_split)
+    assert result["shares"].iloc[0] == 5.0

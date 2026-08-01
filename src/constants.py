@@ -28,7 +28,13 @@ PATH_STOCKS_TRADES = STOCKS_INPUT_DIR / "source_stocks_portfolio_trades.ods"
 # Individual (single) stock trades, e.g. Coca Cola, Nvidia. Same sheet layout as
 # the ETF portfolio file but the securities carry no ISIN.
 PATH_SINGLE_STOCKS_TRADES = STOCKS_INPUT_DIR / "source_stocks_trades.ods"
+# Manually maintained master data for individual stocks (keyed by name, since
+# stocks carry no ISIN): yahoo ticker symbol and currency for price extraction.
+PATH_STOCKS_MASTER_DATA = STOCKS_INPUT_DIR / "source_stocks__master_data.csv"
 PATH_STOCK_MERGERS = STOCKS_INPUT_DIR / "source_stock_mergers.ods"
+# Manually maintained stock splits (keyed by name); shares held before the split
+# date are multiplied by split_to / split_from.
+PATH_STOCK_SPLITS = STOCKS_INPUT_DIR / "source_stock_splits.ods"
 PATH_ETF_MASTER_DATA = SOURCE_DIR / "source_etf__master_data.csv"
 PATH_ETF_MARKET_SNAPSHOT = SOURCE_DIR / "source_etf__market_snapshot.csv"
 PATH_ETF_PRICE_CURRENT = SOURCE_DIR / "source_etf__price_current.csv"
@@ -39,6 +45,14 @@ PATH_ETF_SHARES_MONTHLY = TRANSFORM_DIR / "transform_etf__shares_monthly.csv"
 PATH_ETF_MONTHLY_INVESTMENTS = TRANSFORM_DIR / "transform_etf__monthly_investments.csv"
 PATH_ETF_MONTHLY_DIVIDENDS = TRANSFORM_DIR / "transform_etf__monthly_dividends.csv"
 PATH_ETF_PORTFOLIO_VALUE = TRANSFORM_DIR / "transform_etf__portfolio_value.csv"
+
+# Individual stocks: transform stage (mirrors the ETF portfolio tables, but the
+# securities are identified by name instead of ISIN)
+PATH_STOCKS_SHARES_MONTHLY = TRANSFORM_DIR / "transform_stocks__shares_monthly.csv"
+PATH_STOCKS_PORTFOLIO_VALUE = TRANSFORM_DIR / "transform_stocks__portfolio_value.csv"
+
+# Combined ETF + individual-stock portfolio value with a `security_type` column
+PATH_PORTFOLIO_VALUE_COMBINED = TRANSFORM_DIR / "transform_portfolio__value.csv"
 
 # --- Cashflow: transform stage ---
 PATH_CASHFLOW_COMBINED = TRANSFORM_DIR / "transform_cashflow__toshl_cashflow.csv"
