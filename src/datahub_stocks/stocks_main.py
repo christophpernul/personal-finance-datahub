@@ -23,6 +23,7 @@ from datahub_stocks.extract.extract_master_data import (
 
 from constants import (
     PATH_STOCKS_TRADES,
+    PATH_SINGLE_STOCKS_TRADES,
     PATH_STOCK_MERGERS,
     PATH_ETF_MASTER_DATA,
     PATH_ETF_MARKET_SNAPSHOT,
@@ -55,14 +56,22 @@ def run_stocks():
     etf_sells = preprocess_sells(etf_sells)
     etf_portfolio = pd.concat([etf_buys, etf_sells], ignore_index=True)
 
-    # Received ETF distributions (dividends)
+    # Received dividends: ETF distributions and individual stock dividends,
+    # combined into a single table (both sheets share the same layout).
     etf_dividends = load_data(
         PATH_STOCKS_TRADES,
         file_type="excel",
         sheet_name="Dividends",
     )
     etf_dividends = preprocess_dividends(etf_dividends)
-    logger.info("Dividends Data loaded!")
+    stock_dividends = load_data(
+        PATH_SINGLE_STOCKS_TRADES,
+        file_type="excel",
+        sheet_name="Dividends",
+    )
+    stock_dividends = preprocess_dividends(stock_dividends)
+    dividends = pd.concat([etf_dividends, stock_dividends], ignore_index=True)
+    logger.info("Dividends Data (ETF and stocks) loaded!")
 
     etf_mergers = load_data(
         PATH_STOCK_MERGERS,
@@ -117,10 +126,10 @@ def run_stocks():
     save_data(monthly_investments, PATH_ETF_MONTHLY_INVESTMENTS)
     logger.info("Monthly investments and order costs computed and saved!")
 
-    # Monthly received dividends per ETF
-    monthly_dividends = aggregate_monthly_dividends(etf_dividends)
+    # Monthly received dividends per security (ETFs and individual stocks)
+    monthly_dividends = aggregate_monthly_dividends(dividends)
     save_data(monthly_dividends, PATH_ETF_MONTHLY_DIVIDENDS)
-    logger.info("Monthly dividends per ETF computed and saved!")
+    logger.info("Monthly dividends per security computed and saved!")
 
     # Calculate current portfolio value
     portfolio_value = calculate_portfolio_value(

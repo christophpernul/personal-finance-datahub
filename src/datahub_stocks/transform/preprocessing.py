@@ -137,11 +137,13 @@ def preprocess_mergers(data: pd.DataFrame) -> pd.DataFrame:
 
 
 def preprocess_dividends(data: pd.DataFrame) -> pd.DataFrame:
-    """Normalises the Dividends sheet (received ETF distributions).
+    """Normalises a Dividends sheet (received ETF distributions or stock dividends).
 
     The sheet uses German column headers, so the relevant columns are renamed to
     the datahub's English convention and reduced to [date, isin, name, dividend].
     `dividend` (``Betrag``) is the distribution amount received and is positive.
+    Individual stocks carry no ISIN; the missing ISIN is normalised to an empty
+    string so those securities are identified by `name` alone.
     """
     _validate_columns(data, DIVIDENDS_REQUIRED_COLUMNS, "dividends")
     data = data.rename(
@@ -157,16 +159,21 @@ def preprocess_dividends(data: pd.DataFrame) -> pd.DataFrame:
         data = convert_columns_to_timestamp(data, column_formats={"date": "%d.%m.%Y"})
 
     data["dividend"] = pd.to_numeric(data["dividend"], errors="coerce")
-    data = strip_vals(data, ["isin", "name"])
+    # ISIN is absent for individual stocks (a fully empty float column); represent
+    # it as a stripped string ("" when missing) so it stays a valid group key.
+    data["isin"] = data["isin"].fillna("").astype(str).str.strip()
+    data = strip_vals(data, ["name"])
     return data
 
 
 def aggregate_monthly_dividends(dividends: pd.DataFrame) -> pd.DataFrame:
-    """Aggregates the received ETF distributions per ISIN by month.
+    """Aggregates received dividends (ETF distributions and stock dividends) per
+    security by month.
 
-    Returns a long-format table with one row per (month, ISIN) holding the summed
-    `dividend` amount. Dates are the month-end (last day of the month). Months
-    without any distribution for an ISIN are not included."""
+    Returns a long-format table with one row per (month, security) holding the
+    summed `dividend` amount, where a security is identified by [isin, name]
+    (ISIN is empty for individual stocks). Dates are the month-end (last day of
+    the month). Months without any distribution for a security are not included."""
     dividends = dividends.copy()
     monthly = (
         dividends.groupby([pd.Grouper(key="date", freq="ME"), "isin", "name"])[

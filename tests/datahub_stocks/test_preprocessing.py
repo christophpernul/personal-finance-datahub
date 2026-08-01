@@ -180,3 +180,53 @@ def test_aggregate_monthly_dividends_sums_per_month_and_isin(dividends_raw):
     assert mar_a["dividend"] == 4.0
     # one row per (month, isin); no all-zero rows
     assert len(result) == 3
+
+
+@pytest.fixture
+def stock_dividends_raw():
+    # individual stock dividends: same layout, but no ISIN (empty column)
+    return pd.DataFrame(
+        {
+            "Datum": ["2.4.2021", "1.7.2021", "5.7.2021"],
+            "Betrag": [1.51, 1.49, 0.03],
+            "Name": ["Coca Cola", "Coca Cola", "Nvidia"],
+            "ISIN": [float("nan"), float("nan"), float("nan")],
+        }
+    )
+
+
+@pytest.mark.ut
+def test_preprocess_dividends_handles_missing_isin(stock_dividends_raw):
+    result = preprocess_dividends(stock_dividends_raw)
+    # missing ISIN becomes an empty string, securities keep their name
+    assert (result["isin"] == "").all()
+    assert result["name"].tolist() == ["Coca Cola", "Coca Cola", "Nvidia"]
+
+
+@pytest.mark.ut
+def test_aggregate_monthly_dividends_groups_stocks_by_name(stock_dividends_raw):
+    result = aggregate_monthly_dividends(preprocess_dividends(stock_dividends_raw))
+    # July: Coca Cola and Nvidia stay separate rows despite the shared empty ISIN
+    jul = result[result["date"] == "2021-07-31"].set_index("name")["dividend"]
+    assert jul["Coca Cola"] == 1.49
+    assert jul["Nvidia"] == 0.03
+
+
+@pytest.mark.ut
+def test_aggregate_monthly_dividends_combines_etf_and_stocks(
+    dividends_raw, stock_dividends_raw
+):
+    combined = pd.concat(
+        [
+            preprocess_dividends(dividends_raw),
+            preprocess_dividends(stock_dividends_raw),
+        ],
+        ignore_index=True,
+    )
+    result = aggregate_monthly_dividends(combined)
+    # ETF rows (with ISIN) and stock rows (empty ISIN) coexist in one table
+    assert (result["isin"] == "").any()
+    assert (result["isin"] != "").any()
+    assert round(result["dividend"].sum(), 2) == round(
+        dividends_raw["Betrag"].sum() + stock_dividends_raw["Betrag"].sum(), 2
+    )
