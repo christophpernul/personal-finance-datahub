@@ -34,6 +34,7 @@ PATH_ETF_PRICE_HISTORIC = SOURCE_DIR / "source_etf__price_historic.csv"
 # --- Stocks / ETF: transform stage ---
 PATH_ETF_SHARES_MONTHLY = TRANSFORM_DIR / "transform_etf__shares_monthly.csv"
 PATH_ETF_MONTHLY_INVESTMENTS = TRANSFORM_DIR / "transform_etf__monthly_investments.csv"
+PATH_ETF_MONTHLY_DIVIDENDS = TRANSFORM_DIR / "transform_etf__monthly_dividends.csv"
 PATH_ETF_PORTFOLIO_VALUE = TRANSFORM_DIR / "transform_etf__portfolio_value.csv"
 
 # --- Cashflow: transform stage ---

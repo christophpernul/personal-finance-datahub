@@ -99,6 +99,28 @@ def add_investment_income(
     return result
 
 
+def add_dividend_income(
+    incomes_wide: pd.DataFrame, monthly_dividends: pd.DataFrame
+) -> pd.DataFrame:
+    """Adds the monthly received ETF distributions from the per-ETF monthly
+    dividends table to the wide cashflow income table as a `Dividends` column,
+    matched on month-end date. The per-ETF dividends are summed to a single
+    monthly total. Dividends are positive, matching the sign of the income table.
+
+    The column is added after the tag->category step, so it is intentionally
+    not part of the toshl category mapping."""
+    dividends = monthly_dividends.copy()
+    dividends["date"] = pd.to_datetime(dividends["date"])
+    monthly_total = (
+        dividends.groupby("date", as_index=False)["dividend"]
+        .sum()
+        .rename(columns={"dividend": "Dividends"})
+    )
+    result = incomes_wide.merge(monthly_total, on="date", how="left")
+    result["Dividends"] = result["Dividends"].fillna(0.0)
+    return result
+
+
 def add_investment_expenses(
     expenses_wide: pd.DataFrame, monthly_investments: pd.DataFrame
 ) -> pd.DataFrame:

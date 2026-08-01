@@ -46,6 +46,12 @@ MERGERS_REQUIRED_COLUMNS = {
     "stocks_new",
     "date",
 }
+DIVIDENDS_REQUIRED_COLUMNS = {
+    "Datum",
+    "Betrag",
+    "Name",
+    "ISIN",
+}
 MASTER_DATA_REQUIRED_COLUMNS = {
     "isin",
     "name",
@@ -128,6 +134,50 @@ def preprocess_mergers(data: pd.DataFrame) -> pd.DataFrame:
             data[col].astype(str).str.strip().str.replace(",", ".", regex=False)
         )
     return data
+
+
+def preprocess_dividends(data: pd.DataFrame) -> pd.DataFrame:
+    """Normalises the Dividends sheet (received ETF distributions).
+
+    The sheet uses German column headers, so the relevant columns are renamed to
+    the datahub's English convention and reduced to [date, isin, name, dividend].
+    `dividend` (``Betrag``) is the distribution amount received and is positive.
+    """
+    _validate_columns(data, DIVIDENDS_REQUIRED_COLUMNS, "dividends")
+    data = data.rename(
+        columns={
+            "Datum": "date",
+            "Betrag": "dividend",
+            "Name": "name",
+            "ISIN": "isin",
+        }
+    )[["date", "isin", "name", "dividend"]]
+
+    if not pd.api.types.is_datetime64_any_dtype(data["date"]):
+        data = convert_columns_to_timestamp(data, column_formats={"date": "%d.%m.%Y"})
+
+    data["dividend"] = pd.to_numeric(data["dividend"], errors="coerce")
+    data = strip_vals(data, ["isin", "name"])
+    return data
+
+
+def aggregate_monthly_dividends(dividends: pd.DataFrame) -> pd.DataFrame:
+    """Aggregates the received ETF distributions per ISIN by month.
+
+    Returns a long-format table with one row per (month, ISIN) holding the summed
+    `dividend` amount. Dates are the month-end (last day of the month). Months
+    without any distribution for an ISIN are not included."""
+    dividends = dividends.copy()
+    monthly = (
+        dividends.groupby([pd.Grouper(key="date", freq="ME"), "isin", "name"])[
+            "dividend"
+        ]
+        .sum()
+        .reset_index()
+    )
+    monthly = monthly[monthly["dividend"] != 0.0]
+    monthly["date"] = monthly["date"].dt.strftime("%Y-%m-%d")
+    return monthly[["date", "isin", "name", "dividend"]]
 
 
 def preprocess_master_data(data: pd.DataFrame) -> pd.DataFrame:

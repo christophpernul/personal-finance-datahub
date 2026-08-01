@@ -18,6 +18,7 @@ from constants import (
 from datahub_target.transform.calculate_target_tables import (
     transform_cashflow_to_wide_format,
     add_investment_income,
+    add_dividend_income,
     add_investment_expenses,
 )
 
@@ -28,6 +29,7 @@ def run_target(
     cashflow_incomes: pd.DataFrame,
     cashflow_expenses: pd.DataFrame,
     monthly_investments: pd.DataFrame,
+    monthly_dividends: pd.DataFrame,
 ) -> None:
     """Calculates and stores all dashboard-ready target tables.
 
@@ -36,17 +38,22 @@ def run_target(
     cashflow_incomes / cashflow_expenses: transform-stage cashflow tables
         (monthly, multi-indexed by [date, tag]) as returned by
         `datahub_cashflow.run_cashflow`.
+    monthly_investments / monthly_dividends: transform-stage ETF tables as
+        returned by `datahub_stocks.run_stocks`.
     """
     calculate_cashflow_target_tables(
-        cashflow_incomes, cashflow_expenses, monthly_investments
+        cashflow_incomes, cashflow_expenses, monthly_investments, monthly_dividends
     )
 
 
 def calculate_cashflow_target_tables(
-    incomes: pd.DataFrame, expenses: pd.DataFrame, monthly_investments: pd.DataFrame
+    incomes: pd.DataFrame,
+    expenses: pd.DataFrame,
+    monthly_investments: pd.DataFrame,
+    monthly_dividends: pd.DataFrame,
 ) -> None:
     """Builds the wide-format cashflow tables, enriches them with the ETF
-    monthly investment columns, and stores them as target tables."""
+    monthly investment and dividend columns, and stores them as target tables."""
     toshl_tag_categorization = get_config_file(TOSHL_CATEGORY_MAP)
 
     incomes_wide = transform_cashflow_to_wide_format(
@@ -57,8 +64,10 @@ def calculate_cashflow_target_tables(
     )
 
     # Enrich the cashflow tables with the ETF monthly investment columns before
-    # storing them, so the dashboard finds everything in a single table.
+    # storing them, so the dashboard finds everything in a single table. Received
+    # ETF distributions are added as an additional income column.
     incomes_wide = add_investment_income(incomes_wide, monthly_investments)
+    incomes_wide = add_dividend_income(incomes_wide, monthly_dividends)
     expenses_wide = add_investment_expenses(expenses_wide, monthly_investments)
 
     save_data(data=incomes_wide, filepath=PATH_CASHFLOW_INCOMES_WIDE)

@@ -20,6 +20,6 @@ logger.setLevel(logging.INFO)
 
 cashflow_incomes, cashflow_expenses = run_cashflow()
 
-portfolio_value, monthly_investments = run_stocks()
-run_target(cashflow_incomes, cashflow_expenses, monthly_investments)
+portfolio_value, monthly_investments, monthly_dividends = run_stocks()
+run_target(cashflow_incomes, cashflow_expenses, monthly_investments, monthly_dividends)
 disable_existing_loggers = False

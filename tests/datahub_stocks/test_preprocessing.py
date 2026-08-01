@@ -5,6 +5,8 @@ from src.datahub_stocks.transform.preprocessing import (
     apply_mergers,
     aggregate_monthly_shares,
     aggregate_monthly_investments,
+    preprocess_dividends,
+    aggregate_monthly_dividends,
 )
 
 
@@ -143,3 +145,38 @@ def test_aggregate_monthly_investments_splits_buys_and_sells():
     assert feb["expense_investment"] == 300.0  # only the buy
     assert feb["income_investment"] == 100.0  # sell proceeds, positive
     assert feb["order_costs"] == 3.0  # order costs of both
+
+
+@pytest.fixture
+def dividends_raw():
+    # mirrors the German-headed Dividends sheet layout
+    return pd.DataFrame(
+        {
+            "Datum": ["15.1.2024", "20.1.2024", "10.3.2024"],
+            "Betrag": [1.5, 2.5, 4.0],
+            "Name": ["ETF A", "ETF B", "ETF A"],
+            "ISIN": ["A", "B", "A"],
+        }
+    )
+
+
+@pytest.mark.ut
+def test_preprocess_dividends_renames_and_types(dividends_raw):
+    result = preprocess_dividends(dividends_raw)
+    assert result.columns.tolist() == ["date", "isin", "name", "dividend"]
+    assert pd.api.types.is_datetime64_any_dtype(result["date"])
+    assert result["dividend"].sum() == 8.0
+
+
+@pytest.mark.ut
+def test_aggregate_monthly_dividends_sums_per_month_and_isin(dividends_raw):
+    result = aggregate_monthly_dividends(preprocess_dividends(dividends_raw))
+    assert result.columns.tolist() == ["date", "isin", "name", "dividend"]
+    jan_a = result[(result["date"] == "2024-01-31") & (result["isin"] == "A")].iloc[0]
+    assert jan_a["dividend"] == 1.5
+    jan_b = result[(result["date"] == "2024-01-31") & (result["isin"] == "B")].iloc[0]
+    assert jan_b["dividend"] == 2.5
+    mar_a = result[(result["date"] == "2024-03-31") & (result["isin"] == "A")].iloc[0]
+    assert mar_a["dividend"] == 4.0
+    # one row per (month, isin); no all-zero rows
+    assert len(result) == 3
