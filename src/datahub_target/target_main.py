@@ -24,7 +24,11 @@ from datahub_target.transform.calculate_target_tables import (
 logger = logging.getLogger(__name__)
 
 
-def run_target(cashflow_incomes: pd.DataFrame, cashflow_expenses: pd.DataFrame) -> None:
+def run_target(
+    cashflow_incomes: pd.DataFrame,
+    cashflow_expenses: pd.DataFrame,
+    monthly_investments: pd.DataFrame,
+) -> None:
     """Calculates and stores all dashboard-ready target tables.
 
     Parameters
@@ -33,11 +37,13 @@ def run_target(cashflow_incomes: pd.DataFrame, cashflow_expenses: pd.DataFrame) 
         (monthly, multi-indexed by [date, tag]) as returned by
         `datahub_cashflow.run_cashflow`.
     """
-    calculate_cashflow_target_tables(cashflow_incomes, cashflow_expenses)
+    calculate_cashflow_target_tables(
+        cashflow_incomes, cashflow_expenses, monthly_investments
+    )
 
 
 def calculate_cashflow_target_tables(
-    incomes: pd.DataFrame, expenses: pd.DataFrame
+    incomes: pd.DataFrame, expenses: pd.DataFrame, monthly_investments: pd.DataFrame
 ) -> None:
     """Builds the wide-format cashflow tables, enriches them with the ETF
     monthly investment columns, and stores them as target tables."""
@@ -52,7 +58,6 @@ def calculate_cashflow_target_tables(
 
     # Enrich the cashflow tables with the ETF monthly investment columns before
     # storing them, so the dashboard finds everything in a single table.
-    monthly_investments = load_data(PATH_ETF_MONTHLY_INVESTMENTS, file_type="csv")
     incomes_wide = add_investment_income(incomes_wide, monthly_investments)
     expenses_wide = add_investment_expenses(expenses_wide, monthly_investments)
 

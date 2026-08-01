@@ -23,7 +23,8 @@ def update_toshl_cashflow(
     """
     raw_data_files: [Path] = sorted(source_root_path.glob(raw_data_filepattern))
     for cnt, raw_file_path in enumerate(raw_data_files):
-        df: pd.DataFrame = load_data(raw_file_path)
+        logger.info(f"Loading Toshl cashflow data from {raw_file_path.name}...")
+        df: pd.DataFrame = load_data(raw_file_path, sep=",")
         assert (
             df.drop("Description", axis=1).isna().sum().sum() == 0
         ), f"There are NaN values in Toshl data!"

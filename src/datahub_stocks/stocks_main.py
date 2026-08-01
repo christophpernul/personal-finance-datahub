@@ -111,6 +111,8 @@ def run_stocks():
     )
     save_data(portfolio_value, PATH_ETF_PORTFOLIO_VALUE)
 
+    return portfolio_value, monthly_investments
+
 
 if __name__ == "__main__":
     run_stocks()

@@ -17,7 +17,9 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-# run_stocks()
+
 cashflow_incomes, cashflow_expenses = run_cashflow()
-run_target(cashflow_incomes, cashflow_expenses)
+
+portfolio_value, monthly_investments = run_stocks()
+run_target(cashflow_incomes, cashflow_expenses, monthly_investments)
 disable_existing_loggers = False
