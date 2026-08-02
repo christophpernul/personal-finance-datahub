@@ -43,6 +43,10 @@ PATH_ETF_PRICE_HISTORIC = SOURCE_DIR / "source_etf__price_historic.csv"
 # --- Stocks / ETF: transform stage ---
 PATH_ETF_SHARES_MONTHLY = TRANSFORM_DIR / "transform_etf__shares_monthly.csv"
 PATH_ETF_MONTHLY_INVESTMENTS = TRANSFORM_DIR / "transform_etf__monthly_investments.csv"
+# Monthly *net* rebalancing cashflow (sell proceeds - buy spend - order fees),
+# split into an expense/income column; kept apart from the gross monthly
+# investments because rebalancing sells fund the rebalancing buys.
+PATH_ETF_MONTHLY_REBALANCING = TRANSFORM_DIR / "transform_etf__monthly_rebalancing.csv"
 PATH_ETF_MONTHLY_DIVIDENDS = TRANSFORM_DIR / "transform_etf__monthly_dividends.csv"
 PATH_ETF_PORTFOLIO_VALUE = TRANSFORM_DIR / "transform_etf__portfolio_value.csv"
 

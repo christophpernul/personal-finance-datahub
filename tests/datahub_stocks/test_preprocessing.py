@@ -5,9 +5,11 @@ from src.datahub_stocks.transform.preprocessing import (
     apply_mergers,
     aggregate_monthly_shares,
     aggregate_monthly_investments,
+    aggregate_monthly_rebalancing,
     preprocess_dividends,
     aggregate_monthly_dividends,
     preprocess_stock_trades,
+    preprocess_rebalancing,
     combine_portfolio_values,
     apply_splits,
 )
@@ -358,6 +360,106 @@ def test_apply_splits_rebases_only_pre_split_shares(tesla_portfolio, tesla_split
     assert shares_by_date[pd.Timestamp("2022-12-12")] == 3.0
     # net current holding after the split is 3 shares
     assert result["shares"].sum() == 3.0
+
+
+@pytest.fixture
+def rebalancing_raw():
+    # mirrors the Rebalancing sheet layout (same as Sells): buys have a negative
+    # amount and no explicit share count, sells a positive amount with shares.
+    return pd.DataFrame(
+        {
+            "index": [float("nan")] * 3,
+            "date": ["16.12.2022", "12.12.2022", "12.12.2022"],
+            "type": ["ETF Sparplan"] * 3,
+            "price": [40.0, 39.83, 37.305],
+            # buy of 800 EUR, sell of 6810.93 (171 shares), sell of 3208.23 (86)
+            "amount": [-800.0, 6810.93, 3208.23],
+            "cost": [0.0, -1.0, -1.0],
+            "depot": ["traderepublic"] * 3,
+            "shares": [float("nan"), 171.0, 86.0],
+            "name": ["ETF A", "ETF B", "ETF C"],
+            "isin": ["A", "B", "C"],
+            "_checkSharesEqualAmountDivPrice": [float("nan")] * 3,
+        }
+    )
+
+
+@pytest.mark.ut
+def test_preprocess_rebalancing_buy_and_sell_signs(rebalancing_raw):
+    result = preprocess_rebalancing(rebalancing_raw)
+    assert result.columns.tolist() == [
+        "date",
+        "isin",
+        "name",
+        "type",
+        "total_investment",
+        "cost",
+        "shares",
+        "trade_type",
+    ]
+    buy = result[result["isin"] == "A"].iloc[0]
+    assert buy["trade_type"] == "buy"
+    # buy: derived positive shares (800 / 40) and positive invested amount
+    assert buy["shares"] == pytest.approx(20.0)
+    assert buy["total_investment"] == pytest.approx(800.0)
+    assert buy["cost"] == 0.0
+
+    sell = result[result["isin"] == "B"].iloc[0]
+    assert sell["trade_type"] == "sell"
+    # sell: shares and invested amount negated so a cumulative sum reduces both
+    assert sell["shares"] == pytest.approx(-171.0)
+    assert sell["total_investment"] == pytest.approx(-6810.93)
+    # order fee flipped to positive, matching the Buys/Sells convention
+    assert sell["cost"] == pytest.approx(1.0)
+
+
+@pytest.mark.ut
+def test_preprocess_rebalancing_feeds_shares(rebalancing_raw):
+    # buys add and sells remove real shares from the holdings
+    portfolio = preprocess_rebalancing(rebalancing_raw)
+    shares = aggregate_monthly_shares(portfolio)
+    a = shares[shares["isin"] == "A"]["cumulative_shares"]
+    assert a.iloc[0] == pytest.approx(20.0)
+    # B was only sold (goes negative), so it drops out of the positive holdings
+    assert (shares["isin"] == "B").sum() == 0
+
+
+@pytest.mark.ut
+def test_aggregate_monthly_rebalancing_nets_to_expense(rebalancing_raw):
+    result = aggregate_monthly_rebalancing(preprocess_rebalancing(rebalancing_raw))
+    assert result.columns.tolist() == [
+        "date",
+        "expense_rebalancing",
+        "income_rebalancing",
+    ]
+    dec = result[result["date"] == "2022-12-31"].iloc[0]
+    # net = sell proceeds (6810.93 + 3208.23) - buy spend (800) - fees (2.0)
+    #     = 9217.16 -> a net income
+    assert dec["income_rebalancing"] == pytest.approx(9217.16)
+    assert dec["expense_rebalancing"] == 0.0
+
+
+@pytest.mark.ut
+def test_aggregate_monthly_rebalancing_expense_when_buys_dominate():
+    portfolio = preprocess_rebalancing(
+        pd.DataFrame(
+            {
+                "date": ["16.12.2022", "12.12.2022"],
+                "type": ["ETF Sparplan"] * 2,
+                "price": [40.0, 39.83],
+                "amount": [-5000.0, 1000.0],  # big buy, small sell
+                "cost": [0.0, -1.0],
+                "shares": [float("nan"), 25.11],
+                "name": ["ETF A", "ETF B"],
+                "isin": ["A", "B"],
+            }
+        )
+    )
+    result = aggregate_monthly_rebalancing(portfolio)
+    dec = result[result["date"] == "2022-12-31"].iloc[0]
+    # net = 1000 - 5000 - 1 = -4001 -> a net expense, reported as +4001
+    assert dec["expense_rebalancing"] == pytest.approx(4001.0)
+    assert dec["income_rebalancing"] == 0.0
 
 
 @pytest.mark.ut

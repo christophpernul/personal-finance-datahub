@@ -66,6 +66,16 @@ SPLITS_REQUIRED_COLUMNS = {
     "split_from",
     "split_to",
 }
+REBALANCING_REQUIRED_COLUMNS = {
+    "date",
+    "type",
+    "price",
+    "amount",
+    "cost",
+    "shares",
+    "name",
+    "isin",
+}
 MASTER_DATA_REQUIRED_COLUMNS = {
     "isin",
     "name",
@@ -127,6 +137,58 @@ def preprocess_sells(data: pd.DataFrame) -> pd.DataFrame:
     data["trade_type"] = "sell"
     data = data.rename(columns={"amount": "total_investment"}).drop("price", axis=1)
     return data
+
+
+def preprocess_rebalancing(data: pd.DataFrame) -> pd.DataFrame:
+    """Normalises the ``Rebalancing`` sheet into the ETF portfolio schema.
+
+    The Rebalancing sheet holds the buys and sells done purely to rebalance the
+    portfolio, kept apart from the regular Buys/Sells so their gross amounts do
+    not inflate the monthly investment cashflow: rebalancing sells fund the
+    rebalancing buys, so only the monthly *net* is booked as an expense/income
+    (see `aggregate_monthly_rebalancing`). The share movements are real, though,
+    and still feed the portfolio holdings.
+
+    Layout mirrors the Sells sheet. Buys and sells are distinguished by the sign
+    of ``amount`` as recorded at the bank: a negative ``amount`` is money spent
+    on a buy (no explicit share count, so it is derived from ``amount / price``),
+    a positive ``amount`` is proceeds from a sell (with an explicit ``shares``
+    count). The output uses the same sign convention as the preprocessed
+    Buys/Sells: ``shares`` and ``total_investment`` are positive for buys and
+    negative for sells (so a cumulative sum reduces holdings on a sell), and
+    ``cost`` (order fees) is positive for both."""
+    _validate_columns(data, REBALANCING_REQUIRED_COLUMNS, "rebalancing")
+    if not pd.api.types.is_datetime64_any_dtype(data["date"]):
+        data = convert_columns_to_timestamp(data, column_formats={"date": "%d.%m.%Y"})
+
+    float_cols = ["price", "amount", "cost", "shares"]
+    data[float_cols] = data[float_cols].apply(pd.to_numeric, errors="coerce")
+    data = strip_vals(data, ["name", "isin", "type"])
+
+    is_buy = data["amount"] < 0
+    data["trade_type"] = is_buy.map({True: "buy", False: "sell"})
+    # Buys: money spent (negative amount) has no explicit share count, so derive
+    # it from amount / price and make both the share count and invested amount
+    # positive. Sells: negate the explicit share count and proceeds so they
+    # reduce holdings and the net invested amount.
+    data.loc[is_buy, "shares"] = -data.loc[is_buy, "amount"] / data.loc[is_buy, "price"]
+    data.loc[~is_buy, "shares"] = -data.loc[~is_buy, "shares"]
+    data["total_investment"] = -data["amount"]  # buys: +spent, sells: -proceeds
+    # Order fees are recorded as a negative amount in the sheet; flip to positive
+    # to match the preprocessed Buys/Sells convention (positive order costs).
+    data["cost"] = -data["cost"]
+    return data[
+        [
+            "date",
+            "isin",
+            "name",
+            "type",
+            "total_investment",
+            "cost",
+            "shares",
+            "trade_type",
+        ]
+    ]
 
 
 def preprocess_mergers(data: pd.DataFrame) -> pd.DataFrame:
@@ -362,6 +424,37 @@ def aggregate_monthly_investments(portfolio: pd.DataFrame) -> pd.DataFrame:
     )
     monthly["date"] = monthly["date"].dt.strftime("%Y-%m-%d")
     return monthly[["date", "expense_investment", "income_investment", "order_costs"]]
+
+
+def aggregate_monthly_rebalancing(rebalancing: pd.DataFrame) -> pd.DataFrame:
+    """Aggregates the rebalancing trades to a single monthly *net* cashflow.
+
+    Rebalancing sells fund the rebalancing buys, so only the net cash that
+    actually left (or entered) the account is booked, not the gross buy amount.
+    Per month the net is ``sell proceeds - buy spend - order fees``: a negative
+    net is an expense, a positive net an income. Returns [date,
+    expense_rebalancing, income_rebalancing] with month-end dates and at most one
+    of the two amounts non-zero per month (both reported as positive magnitudes),
+    mirroring the buy/sell split of `aggregate_monthly_investments`."""
+    rebalancing = rebalancing.copy()
+    is_buy = rebalancing["trade_type"] == "buy"
+    # buy spend and sell proceeds as positive magnitudes
+    rebalancing["buy_spend"] = rebalancing["total_investment"].where(is_buy, 0.0)
+    rebalancing["sell_proceeds"] = (-rebalancing["total_investment"]).where(
+        ~is_buy, 0.0
+    )
+    monthly = (
+        rebalancing.groupby(pd.Grouper(key="date", freq="ME"))[
+            ["buy_spend", "sell_proceeds", "cost"]
+        ]
+        .sum()
+        .reset_index()
+    )
+    net = monthly["sell_proceeds"] - monthly["buy_spend"] - monthly["cost"]
+    monthly["expense_rebalancing"] = (-net).where(net < 0, 0.0)
+    monthly["income_rebalancing"] = net.where(net > 0, 0.0)
+    monthly["date"] = monthly["date"].dt.strftime("%Y-%m-%d")
+    return monthly[["date", "expense_rebalancing", "income_rebalancing"]]
 
 
 def combine_portfolio_values(

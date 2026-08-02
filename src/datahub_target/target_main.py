@@ -20,6 +20,8 @@ from datahub_target.transform.calculate_target_tables import (
     add_investment_income,
     add_dividend_income,
     add_investment_expenses,
+    add_rebalancing_income,
+    add_rebalancing_expenses,
 )
 
 logger = logging.getLogger(__name__)
@@ -30,6 +32,7 @@ def run_target(
     cashflow_expenses: pd.DataFrame,
     monthly_investments: pd.DataFrame,
     monthly_dividends: pd.DataFrame,
+    monthly_rebalancing: pd.DataFrame,
 ) -> None:
     """Calculates and stores all dashboard-ready target tables.
 
@@ -38,11 +41,15 @@ def run_target(
     cashflow_incomes / cashflow_expenses: transform-stage cashflow tables
         (monthly, multi-indexed by [date, tag]) as returned by
         `datahub_cashflow.run_cashflow`.
-    monthly_investments / monthly_dividends: transform-stage ETF tables as
-        returned by `datahub_stocks.run_stocks`.
+    monthly_investments / monthly_dividends / monthly_rebalancing: transform-stage
+        ETF tables as returned by `datahub_stocks.run_stocks`.
     """
     calculate_cashflow_target_tables(
-        cashflow_incomes, cashflow_expenses, monthly_investments, monthly_dividends
+        cashflow_incomes,
+        cashflow_expenses,
+        monthly_investments,
+        monthly_dividends,
+        monthly_rebalancing,
     )
 
 
@@ -51,9 +58,11 @@ def calculate_cashflow_target_tables(
     expenses: pd.DataFrame,
     monthly_investments: pd.DataFrame,
     monthly_dividends: pd.DataFrame,
+    monthly_rebalancing: pd.DataFrame,
 ) -> None:
     """Builds the wide-format cashflow tables, enriches them with the ETF
-    monthly investment and dividend columns, and stores them as target tables."""
+    monthly investment, dividend and rebalancing columns, and stores them as
+    target tables."""
     toshl_tag_categorization = get_config_file(TOSHL_CATEGORY_MAP)
 
     incomes_wide = transform_cashflow_to_wide_format(
@@ -65,10 +74,14 @@ def calculate_cashflow_target_tables(
 
     # Enrich the cashflow tables with the ETF monthly investment columns before
     # storing them, so the dashboard finds everything in a single table. Received
-    # ETF distributions are added as an additional income column.
+    # ETF distributions are added as an additional income column. The rebalancing
+    # net is folded into the Investment column (not a separate category), so it
+    # must run after the Investment column has been created.
     incomes_wide = add_investment_income(incomes_wide, monthly_investments)
     incomes_wide = add_dividend_income(incomes_wide, monthly_dividends)
+    incomes_wide = add_rebalancing_income(incomes_wide, monthly_rebalancing)
     expenses_wide = add_investment_expenses(expenses_wide, monthly_investments)
+    expenses_wide = add_rebalancing_expenses(expenses_wide, monthly_rebalancing)
 
     save_data(data=incomes_wide, filepath=PATH_CASHFLOW_INCOMES_WIDE)
     save_data(data=expenses_wide, filepath=PATH_CASHFLOW_EXPENSES_WIDE)

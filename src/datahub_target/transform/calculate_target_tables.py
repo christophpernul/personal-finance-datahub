@@ -103,6 +103,51 @@ def add_investment_income(
     return result
 
 
+def add_rebalancing_income(
+    incomes_wide: pd.DataFrame, monthly_rebalancing: pd.DataFrame
+) -> pd.DataFrame:
+    """Folds the monthly *net* rebalancing income into the existing `Investment`
+    income column, matched on month-end date. A month is a rebalancing income
+    only when the sell proceeds exceeded the buy spend and order fees; that net
+    is added to `Investment` rather than tracked as its own category. Incomes
+    stay positive, matching the sign of the income table.
+
+    Must run after `add_investment_income`, which creates the `Investment`
+    column."""
+    rebalancing = monthly_rebalancing.copy()
+    rebalancing["date"] = pd.to_datetime(rebalancing["date"])
+    result = incomes_wide.merge(
+        rebalancing[["date", "income_rebalancing"]], on="date", how="left"
+    )
+    result["income_rebalancing"] = result["income_rebalancing"].fillna(0.0)
+    result["Investment"] = result["Investment"] + result["income_rebalancing"]
+    result.drop(columns="income_rebalancing", inplace=True)
+    return result
+
+
+def add_rebalancing_expenses(
+    expenses_wide: pd.DataFrame, monthly_rebalancing: pd.DataFrame
+) -> pd.DataFrame:
+    """Folds the monthly *net* rebalancing expense into the existing `Investment`
+    expense column, matched on month-end date. A month is a rebalancing expense
+    only when the buy spend and order fees exceeded the sell proceeds; that net
+    is negated (to follow the expense table's convention of storing outflows as
+    negative amounts) and added to `Investment` rather than tracked as its own
+    category.
+
+    Must run after `add_investment_expenses`, which creates the `Investment`
+    column."""
+    rebalancing = monthly_rebalancing.copy()
+    rebalancing["date"] = pd.to_datetime(rebalancing["date"])
+    result = expenses_wide.merge(
+        rebalancing[["date", "expense_rebalancing"]], on="date", how="left"
+    )
+    result["expense_rebalancing"] = result["expense_rebalancing"].fillna(0.0)
+    result["Investment"] = result["Investment"] - result["expense_rebalancing"]
+    result.drop(columns="expense_rebalancing", inplace=True)
+    return result
+
+
 def add_dividend_income(
     incomes_wide: pd.DataFrame, monthly_dividends: pd.DataFrame
 ) -> pd.DataFrame:

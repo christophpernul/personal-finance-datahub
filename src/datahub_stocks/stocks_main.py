@@ -11,10 +11,12 @@ from datahub_stocks.transform.preprocessing import (
     preprocess_dividends,
     preprocess_stock_trades,
     preprocess_splits,
+    preprocess_rebalancing,
     apply_mergers,
     apply_splits,
     aggregate_monthly_shares,
     aggregate_monthly_investments,
+    aggregate_monthly_rebalancing,
     aggregate_monthly_dividends,
     calculate_portfolio_value,
     combine_portfolio_values,
@@ -37,6 +39,7 @@ from constants import (
     PATH_ETF_PRICE_HISTORIC,
     PATH_ETF_SHARES_MONTHLY,
     PATH_ETF_MONTHLY_INVESTMENTS,
+    PATH_ETF_MONTHLY_REBALANCING,
     PATH_ETF_MONTHLY_DIVIDENDS,
     PATH_ETF_PORTFOLIO_VALUE,
     PATH_STOCKS_SHARES_MONTHLY,
@@ -64,6 +67,15 @@ def run_stocks():
     )
     etf_sells = preprocess_sells(etf_sells)
     etf_portfolio = pd.concat([etf_buys, etf_sells], ignore_index=True)
+
+    # Rebalancing trades (buys and sells done purely to rebalance the portfolio)
+    # are kept in a separate sheet: the share movements are real and feed the
+    # holdings, but only their monthly *net* is booked as cashflow, so they are
+    # kept out of the gross monthly investments below.
+    etf_rebalancing = preprocess_rebalancing(
+        load_data(PATH_STOCKS_TRADES, file_type="excel", sheet_name="Rebalancing")
+    )
+    logger.info("Rebalancing trades loaded!")
 
     # Individual stock trades (same file/layout as the ETF trades, but German
     # headers, no ISIN and no explicit shares column on the Sells sheet).
@@ -160,9 +172,14 @@ def run_stocks():
 
     ### TRANSFORM
 
-    # Transform monthly portfolio history to cumulative share holdings per month
+    # Transform monthly portfolio history to cumulative share holdings per month.
+    # The rebalancing trades move real shares, so they are folded into the
+    # holdings (and the portfolio value / cost basis below), but not into the
+    # gross monthly investments.
     etf_portfolio = apply_mergers(etf_portfolio, etf_mergers)
-    etf_shares = aggregate_monthly_shares(etf_portfolio)
+    etf_rebalancing = apply_mergers(etf_rebalancing, etf_mergers)
+    etf_holdings = pd.concat([etf_portfolio, etf_rebalancing], ignore_index=True)
+    etf_shares = aggregate_monthly_shares(etf_holdings)
     save_data(etf_shares, PATH_ETF_SHARES_MONTHLY)
     logger.info("Monthly ETF share holdings computed and saved!")
 
@@ -173,10 +190,17 @@ def run_stocks():
     save_data(stock_shares, PATH_STOCKS_SHARES_MONTHLY)
     logger.info("Monthly stock share holdings computed and saved!")
 
-    # Monthly net invested amount and order costs (ETF trades)
+    # Monthly net invested amount and order costs (regular ETF trades only)
     monthly_investments = aggregate_monthly_investments(etf_portfolio)
     save_data(monthly_investments, PATH_ETF_MONTHLY_INVESTMENTS)
     logger.info("Monthly investments and order costs computed and saved!")
+
+    # Monthly net rebalancing cashflow (sell proceeds - buy spend - order fees),
+    # split into an expense/income column and booked separately from the gross
+    # investments above.
+    monthly_rebalancing = aggregate_monthly_rebalancing(etf_rebalancing)
+    save_data(monthly_rebalancing, PATH_ETF_MONTHLY_REBALANCING)
+    logger.info("Monthly net rebalancing cashflow computed and saved!")
 
     # Non-portfolio stock trades (e.g. the expired Put Option) are recorded as an
     # additional investment expense in the cashflow, so fold them into the
@@ -197,9 +221,11 @@ def run_stocks():
     save_data(monthly_dividends, PATH_ETF_MONTHLY_DIVIDENDS)
     logger.info("Monthly dividends per security computed and saved!")
 
-    # Calculate current portfolio value (ETFs and individual stocks)
+    # Calculate current portfolio value (ETFs and individual stocks). Rebalancing
+    # trades are part of the holdings, so `etf_holdings` (regular + rebalancing)
+    # supplies both the share counts and the invested-amount / cost basis.
     portfolio_value = calculate_portfolio_value(
-        etf_shares, etf_current_prices, master_data, etf_portfolio
+        etf_shares, etf_current_prices, master_data, etf_holdings
     )
     save_data(portfolio_value, PATH_ETF_PORTFOLIO_VALUE)
 
@@ -218,7 +244,7 @@ def run_stocks():
         f"Combined ETF + stock portfolio value saved in {PATH_PORTFOLIO_VALUE_COMBINED}"
     )
 
-    return portfolio_value, monthly_investments, monthly_dividends
+    return portfolio_value, monthly_investments, monthly_dividends, monthly_rebalancing
 
 
 if __name__ == "__main__":
