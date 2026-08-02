@@ -96,6 +96,10 @@ def add_investment_income(
         investments[["date", "Investment"]], on="date", how="left"
     )
     result["Investment"] = result["Investment"].fillna(0.0)
+
+    # Combine the incomes tracked via Excel and toshl
+    result["Investment"] = result["Investment"] + result["Investment Profit"]
+    result.drop("Investment Profit", axis=1, inplace=True)
     return result
 
 
