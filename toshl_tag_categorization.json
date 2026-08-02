@@ -8,10 +8,12 @@
       "heating",
       "electricity"
     ],
+    "Lebensmittel": [
+      "Lebensmittel",
+      "groceries"
+    ],
     "Restaurants": [
       "restaurants",
-      "Lebensmittel",
-      "groceries",
       "Restaurants",
       "Restaurant Mittag"
     ],
@@ -70,13 +72,16 @@
       "adult fun",
       "Spaß für Erwachsene",
       "games",
+      "sport venues",
+      "books"
+    ],
+    "Internet & Apps": [
       "movies & TV",
       "internet",
       "mobile phone",
-      "sport venues",
+      "landline phone",
       "apps",
-      "music",
-      "books"
+      "music"
     ],
     "Clothes & Health": [
       "clothes",
@@ -88,24 +93,27 @@
       "medical servies",
       "shoes"
     ],
-    "Devices": [
-      "devices",
+    "Wohnungseinrichtung": [
       "home improvement",
-      "landline phone",
       "furniture",
       "plants"
+    ],
+    "Devices": [
+      "devices"
     ],
     "Presents": [
       "birthday",
       "X-Mas"
     ],
-    "Other": [
+    "Kaution": [
+      "Kaution"
+    ],
+    "Steuern & Gebühren": [
       "wechsel",
       "income tax",
       "tuition",
       "publications",
       "property tax",
-      "Kaution",
       "toll",
       "Gebühr"
     ],

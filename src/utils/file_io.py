@@ -40,6 +40,8 @@ def load_data(
     used_library: str = "pandas",
     file_type: str = "csv",
     sheet_name: str = None,
+    sep: str = ";",
+    decimal: str = ",",
 ) -> pd.DataFrame | None:
     """
     Loads data from given filepath and given file_extension
@@ -48,7 +50,9 @@ def load_data(
     filepath: Path including filename and file extension
     used_library: Specifies the python library to load data
     file_type: Specifies the file type of the data to be loaded
-    sheet_name: In case of excel file, specify the sheet name to load. If None, the first sheet will be loaded.
+    sheet_name: In case of Excel file, specify the sheet name to load. If None, the first sheet will be loaded.
+    sep: Column separator in case a CSV file is used
+    decimal: Decimal separator in case a CSV file is used
 
     Returns
     -------
@@ -63,7 +67,7 @@ def load_data(
     #     load_func = pd.read_excel
     # TODO: Add polars
     if used_library == "pandas" and file_type == "csv":
-        return pd.read_csv(filepath_or_buffer=str(filepath), sep=";", decimal=",")
+        return pd.read_csv(filepath_or_buffer=str(filepath), sep=sep, decimal=decimal)
     elif used_library == "pandas" and file_type == "excel":
         if not sheet_name:
             return pd.read_excel(filepath, engine="odf")

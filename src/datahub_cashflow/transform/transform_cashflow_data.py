@@ -1,7 +1,6 @@
 import pandas as pd
 import logging
 from pathlib import Path
-from functools import reduce
 
 from utils.file_io import load_data
 
@@ -24,7 +23,8 @@ def update_toshl_cashflow(
     """
     raw_data_files: [Path] = sorted(source_root_path.glob(raw_data_filepattern))
     for cnt, raw_file_path in enumerate(raw_data_files):
-        df: pd.DataFrame = load_data(raw_file_path)
+        logger.info(f"Loading Toshl cashflow data from {raw_file_path.name}...")
+        df: pd.DataFrame = load_data(raw_file_path, sep=",")
         assert (
             df.drop("Description", axis=1).isna().sum().sum() == 0
         ), f"There are NaN values in Toshl data!"
@@ -198,63 +198,3 @@ def combine_incomes(
     df_income = df_income.groupby([pd.Grouper(key="date", freq="ME"), "tag"]).sum()
 
     return df_income
-
-
-def transform_cashflow_to_wide_format(
-    df: pd.DataFrame, tag_category_map: {}
-) -> tuple[pd.DataFrame | None, pd.DataFrame]:
-    """
-    Remap tags of input data to custom categories, and change the format of the dataframe from longlist to wide format
-    to easily do computations and plots of the cashflow data.
-    Parameters
-    ----------
-    df: Contains cashflow data as longlist, [date, tag] are indices, amount is only column
-    tag_category_map: Mapping of custom categories to a list of toshl tags. Needs to be category map for either income or expenses
-
-    Returns
-    -------
-    Dataframe in wide format where each column is a category and date column is index
-    """
-    assert (
-        isinstance(df.index, pd.core.indexes.multi.MultiIndex)
-        and set(df.index.names) == {"date", "tag"}
-        and list(df.columns) == ["amount"]
-    ), "Dataframe is not grouped by month with a multi-index of [date, tag] and column amount!"
-    ### Define custom categories for all tags of Toshl
-
-    # Create all_category_lists, which is list of category values from custom category map
-    # Reduce recursively flattens out all lists and results in one list of categories
-    all_category_lists = [cat_list for cat_list in list(tag_category_map.values())]
-    category_list = reduce(lambda x, y: x + y, all_category_lists)
-
-    ### Create wide format from longlist, fill NaNs with zero and drop level 0 index "amount"
-    pivot_init = df.unstack()
-    pivot_init.fillna(0, inplace=True)
-    pivot_init.columns = pivot_init.columns.droplevel()
-
-    not_categorized = [tag for tag in pivot_init.columns if tag not in category_list]
-    assert (
-        len(not_categorized) == 0
-    ), f"There are some tags, which are not yet categorized: {not_categorized}"
-
-    # Calculate sum per categories and drop corresponding tags
-    pivot = pivot_init.copy()
-    for category, category_tags in tag_category_map.items():
-        category_tags_in_data = list(
-            set(category_tags).intersection(set(pivot.columns))
-        )
-        pivot[category] = pivot[category_tags_in_data].sum(axis=1)
-        # Do not drop the newly created category column in case the custom category has the same name as one of the original ones
-        category_columns_to_drop = list(
-            set(category_tags_in_data).difference({category})
-        )
-        pivot.drop(columns=category_columns_to_drop, inplace=True)
-
-    ### Keep only categories with non-zero total amount in result
-    category_sum = pivot.sum().reset_index()
-    nonzero_categories = list(category_sum[category_sum[0] != 0.0]["tag"])
-
-    # Get date from index
-    pivot = pivot[nonzero_categories].reset_index()
-
-    return pivot

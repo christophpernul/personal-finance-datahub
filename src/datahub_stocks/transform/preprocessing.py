@@ -46,6 +46,26 @@ MERGERS_REQUIRED_COLUMNS = {
     "stocks_new",
     "date",
 }
+DIVIDENDS_REQUIRED_COLUMNS = {
+    "Datum",
+    "Betrag",
+    "Name",
+    "ISIN",
+}
+STOCK_TRADES_REQUIRED_COLUMNS = {
+    "Datum",
+    "Art",
+    "Kurs",
+    "Betrag",
+    "Kosten",
+    "Name",
+}
+SPLITS_REQUIRED_COLUMNS = {
+    "name",
+    "date",
+    "split_from",
+    "split_to",
+}
 MASTER_DATA_REQUIRED_COLUMNS = {
     "isin",
     "name",
@@ -88,6 +108,7 @@ def preprocess_buys(data: pd.DataFrame) -> pd.DataFrame:
     data["amount"] *= -1  # Amount is a cost and is negative
     data["cost"] *= -1
     data["shares"] = data["amount"] / data["price"]
+    data["trade_type"] = "buy"
     data = data.rename(columns={"amount": "total_investment"}).drop("price", axis=1)
     return data
 
@@ -103,6 +124,7 @@ def preprocess_sells(data: pd.DataFrame) -> pd.DataFrame:
     # When sold the number of shares and the total amount invested decreases
     data["shares"] = -data["shares"]
     data["amount"] = -data["amount"]
+    data["trade_type"] = "sell"
     data = data.rename(columns={"amount": "total_investment"}).drop("price", axis=1)
     return data
 
@@ -126,6 +148,150 @@ def preprocess_mergers(data: pd.DataFrame) -> pd.DataFrame:
             data[col].astype(str).str.strip().str.replace(",", ".", regex=False)
         )
     return data
+
+
+def preprocess_stock_trades(data: pd.DataFrame, is_buy: bool) -> pd.DataFrame:
+    """Normalises an individual-stock ``Buys``/``Sells`` sheet.
+
+    The stock trade sheets use German headers and, unlike the ETF sheets, carry
+    no ISIN (securities are identified by name) and no explicit ``shares`` column
+    on the Sells sheet. To reuse the ISIN-keyed portfolio aggregation unchanged,
+    the security `name` is used as the `isin` identifier.
+
+    Sign convention (matching the ETF portfolio after preprocessing): `shares`
+    and `total_investment` are positive for buys and negative for sells, so a
+    cumulative sum reduces holdings on a sell; `cost` (order fees) stays positive
+    for both. The original trade kind (``Art``, e.g. ``Aktien``/``Put Option``)
+    is kept in the `type` column so non-stock rows can be filtered out later.
+    """
+    _validate_columns(data, STOCK_TRADES_REQUIRED_COLUMNS, "stock_trades")
+    data = data.rename(
+        columns={
+            "Datum": "date",
+            "Art": "type",
+            "Kurs": "price",
+            "Betrag": "amount",
+            "Kosten": "cost",
+            "Name": "name",
+        }
+    )
+
+    if not pd.api.types.is_datetime64_any_dtype(data["date"]):
+        data = convert_columns_to_timestamp(data, column_formats={"date": "%d.%m.%Y"})
+
+    float_cols = ["price", "amount", "cost"]
+    data[float_cols] = data[float_cols].apply(pd.to_numeric, errors="coerce")
+    data = strip_vals(data, ["name", "type"])
+
+    # Stocks carry no ISIN; use the name as the security identifier.
+    data["isin"] = data["name"]
+    # Stocks are only traded in whole shares; the raw amount/price ratio only
+    # deviates from an integer because of price rounding, so round to full shares.
+    data["shares"] = (data["amount"] / data["price"]).round()
+    if is_buy:
+        data["trade_type"] = "buy"
+    else:
+        # Sells reduce holdings and the net invested amount.
+        data["shares"] = -data["shares"]
+        data["amount"] = -data["amount"]
+        data["trade_type"] = "sell"
+    data = data.rename(columns={"amount": "total_investment"}).drop("price", axis=1)
+    return data[
+        [
+            "date",
+            "isin",
+            "name",
+            "type",
+            "total_investment",
+            "cost",
+            "shares",
+            "trade_type",
+        ]
+    ]
+
+
+def preprocess_dividends(data: pd.DataFrame) -> pd.DataFrame:
+    """Normalises a Dividends sheet (received ETF distributions or stock dividends).
+
+    The sheet uses German column headers, so the relevant columns are renamed to
+    the datahub's English convention and reduced to [date, isin, name, dividend].
+    `dividend` (``Betrag``) is the distribution amount received and is positive.
+    Individual stocks carry no ISIN; the missing ISIN is normalised to an empty
+    string so those securities are identified by `name` alone.
+    """
+    _validate_columns(data, DIVIDENDS_REQUIRED_COLUMNS, "dividends")
+    data = data.rename(
+        columns={
+            "Datum": "date",
+            "Betrag": "dividend",
+            "Name": "name",
+            "ISIN": "isin",
+        }
+    )[["date", "isin", "name", "dividend"]]
+
+    if not pd.api.types.is_datetime64_any_dtype(data["date"]):
+        data = convert_columns_to_timestamp(data, column_formats={"date": "%d.%m.%Y"})
+
+    data["dividend"] = pd.to_numeric(data["dividend"], errors="coerce")
+    # ISIN is absent for individual stocks (a fully empty float column); represent
+    # it as a stripped string ("" when missing) so it stays a valid group key.
+    data["isin"] = data["isin"].fillna("").astype(str).str.strip()
+    data = strip_vals(data, ["name"])
+    return data
+
+
+def aggregate_monthly_dividends(dividends: pd.DataFrame) -> pd.DataFrame:
+    """Aggregates received dividends (ETF distributions and stock dividends) per
+    security by month.
+
+    Returns a long-format table with one row per (month, security) holding the
+    summed `dividend` amount, where a security is identified by [isin, name]
+    (ISIN is empty for individual stocks). Dates are the month-end (last day of
+    the month). Months without any distribution for a security are not included."""
+    dividends = dividends.copy()
+    monthly = (
+        dividends.groupby([pd.Grouper(key="date", freq="ME"), "isin", "name"])[
+            "dividend"
+        ]
+        .sum()
+        .reset_index()
+    )
+    monthly = monthly[monthly["dividend"] != 0.0]
+    monthly["date"] = monthly["date"].dt.strftime("%Y-%m-%d")
+    return monthly[["date", "isin", "name", "dividend"]]
+
+
+def preprocess_splits(data: pd.DataFrame) -> pd.DataFrame:
+    """Normalises the stock splits table (keyed by security name).
+
+    Each row describes a split for one security: `split_from` shares became
+    `split_to` shares on `date` (e.g. a 1-to-3 split has split_from=1,
+    split_to=3)."""
+    _validate_columns(data, SPLITS_REQUIRED_COLUMNS, "splits")
+    if not pd.api.types.is_datetime64_any_dtype(data["date"]):
+        data = convert_columns_to_timestamp(data, column_formats={"date": "%d.%m.%Y"})
+
+    for col in ["split_from", "split_to"]:
+        data[col] = pd.to_numeric(data[col])
+    data = strip_vals(data, ["name"])
+    return data
+
+
+def apply_splits(portfolio: pd.DataFrame, splits: pd.DataFrame) -> pd.DataFrame:
+    """Adjusts the share counts of trades that happened *before* a split date by
+    the split ratio ``split_to / split_from``.
+
+    Only shares acquired before the split are re-based into post-split units;
+    trades on or after the split date are already quoted in post-split shares and
+    are left unchanged. The invested amount and order costs are not touched."""
+    result = portfolio.copy()
+    for _, split in splits.iterrows():
+        ratio = split["split_to"] / split["split_from"]
+        mask = (result["name"] == split["name"]) & (result["date"] < split["date"])
+        if not mask.any():
+            continue
+        result.loc[mask, "shares"] = result.loc[mask, "shares"] * ratio
+    return result
 
 
 def preprocess_master_data(data: pd.DataFrame) -> pd.DataFrame:
@@ -170,6 +336,45 @@ def aggregate_monthly_shares(portfolio: pd.DataFrame) -> pd.DataFrame:
     result.columns = ["date", "isin", "cumulative_shares"]
     result = result[result["cumulative_shares"] > 0]
     return result
+
+
+def aggregate_monthly_investments(portfolio: pd.DataFrame) -> pd.DataFrame:
+    """Aggregates monthly buy expenses, sell income and order costs per month.
+
+    `total_investment` is positive for buys and negative for sells, so buys map
+    to `expense_investment` (money invested) and sells to `income_investment`
+    (proceeds, reported as a positive amount). `cost` holds the order fees
+    (positive for both buys and sells) and is summed into `order_costs`. Dates
+    are the month-end (last day of the month)."""
+    portfolio = portfolio.copy()
+    is_buy = portfolio["trade_type"] == "buy"
+    portfolio["expense_investment"] = portfolio["total_investment"].where(is_buy, 0.0)
+    portfolio["income_investment"] = (-portfolio["total_investment"]).where(
+        ~is_buy, 0.0
+    )
+    monthly = (
+        portfolio.groupby(pd.Grouper(key="date", freq="ME"))[
+            ["expense_investment", "income_investment", "cost"]
+        ]
+        .sum()
+        .reset_index()
+        .rename(columns={"cost": "order_costs"})
+    )
+    monthly["date"] = monthly["date"].dt.strftime("%Y-%m-%d")
+    return monthly[["date", "expense_investment", "income_investment", "order_costs"]]
+
+
+def combine_portfolio_values(
+    etf_value: pd.DataFrame, stock_value: pd.DataFrame
+) -> pd.DataFrame:
+    """Concatenates the ETF and individual-stock portfolio value tables into a
+    single table, tagging each row with a `security_type` of ``ETF`` or
+    ``Aktie`` so both asset classes can be reported together."""
+    etf = etf_value.copy()
+    stock = stock_value.copy()
+    etf["security_type"] = "ETF"
+    stock["security_type"] = "Aktie"
+    return pd.concat([etf, stock], ignore_index=True)
 
 
 def calculate_portfolio_value(

@@ -1,84 +1,59 @@
 import logging
-from pathlib import Path
 
-from utils.file_io import get_config_file, save_data, load_data
+import pandas as pd
+
+from utils.file_io import save_data
 from constants import (
-    DATAHUB_ROOT_FILEPATH,
-    TOSHL_CATEGORY_MAP,
     TOSHL_SOURCE_FILEPATTERN,
+    TOSHL_SOURCE_DIR,
+    PATH_CASHFLOW_COMBINED,
+    PATH_CASHFLOW_INCOMES,
+    PATH_CASHFLOW_EXPENSES,
 )
 from datahub_cashflow.transform.transform_cashflow_data import (
     update_toshl_cashflow,
-    transform_cashflow_to_wide_format,
     split_cashflow_data,
     cleaning_cashflow,
-    combine_incomes,
 )
 
 logger = logging.getLogger(__name__)
 
 
-def run_cashflow():
-    # Set source and target filepaths
-    filepath_source = Path(DATAHUB_ROOT_FILEPATH) / "source" / "cashflow" / "toshl"
-    filepath_target = Path(DATAHUB_ROOT_FILEPATH) / "target" / "cashflow"
+def run_cashflow() -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Runs the cashflow transform stage.
 
+    Returns the monthly, multi-indexed ([date, tag]) income and expense tables
+    so the target stage (`datahub_target.run_target`) can build the
+    dashboard-ready tables from them.
+    """
     # Update complete cashflow data from Toshl
-    stage = "A00"
-    outpath = filepath_target / f"{stage}_toshl_cashflow.csv"
-
-    a_00_cashflow = update_toshl_cashflow(
-        source_root_path=filepath_source,
+    combined_cashflow = update_toshl_cashflow(
+        source_root_path=TOSHL_SOURCE_DIR,
         raw_data_filepattern=TOSHL_SOURCE_FILEPATTERN,
     )
     save_data(
-        data=a_00_cashflow,
-        filepath=outpath,
+        data=combined_cashflow,
+        filepath=PATH_CASHFLOW_COMBINED,
     )
-    logger.info(f"Complete cashflow written to {outpath}")
+    logger.info(f"Complete cashflow written to {PATH_CASHFLOW_COMBINED}")
 
     # Clean cashflow data
-    a_01_cashflow = cleaning_cashflow(a_00_cashflow)
+    cleaned_cashflow = cleaning_cashflow(combined_cashflow)
     logger.info(f"Cashflow data cleaned!")
 
-    # Combine income data from toshl with user input incomes
-    stage = "A10"
-
-    a_10_incomes, a_10_expenses = split_cashflow_data(a_01_cashflow)
+    # Split into monthly incomes and expenses
+    incomes, expenses = split_cashflow_data(cleaned_cashflow)
     save_data(
-        data=a_10_incomes,
-        filepath=filepath_target / f"{stage}_incomes.csv",
+        data=incomes,
+        filepath=PATH_CASHFLOW_INCOMES,
     )
     save_data(
-        data=a_10_expenses,
-        filepath=filepath_target / f"{stage}_expenses.csv",
+        data=expenses,
+        filepath=PATH_CASHFLOW_EXPENSES,
     )
-    logger.info(f"Combined incomes and expenses saved in {filepath_target}")
+    logger.info("Cashflow incomes and expenses saved in transform stage")
 
-    # Load toshl categorization and apply conversion to format required by dashboard
-    stage = "B00"
-    toshl_tag_categorization = get_config_file(TOSHL_CATEGORY_MAP)
-
-    b_00_incomes = transform_cashflow_to_wide_format(
-        a_10_incomes, toshl_tag_categorization["income"]
-    )
-    save_data(
-        data=b_00_incomes,
-        filepath=filepath_target / (f"{stage}_" + "incomes.csv"),
-    )
-
-    b_00_expenses = transform_cashflow_to_wide_format(
-        a_10_expenses, toshl_tag_categorization["expenses"]
-    )
-    save_data(
-        data=b_00_expenses,
-        filepath=filepath_target / (f"{stage}_" + "expenses.csv"),
-    )
-    logger.info(
-        f"Final cashflow expenses and incomes saved for usage in dashboard in {filepath_target}"
-    )
-    test = load_data(filepath=filepath_target / (f"{stage}_" + "expenses.csv"))
-    logger.info("Cashflow preprocessing finished!")
+    return incomes, expenses
 
 
 if __name__ == "__main__":
