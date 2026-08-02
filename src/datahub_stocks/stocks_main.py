@@ -118,6 +118,7 @@ def run_stocks():
     master_data = load_data(
         filepath=PATH_ETF_MASTER_DATA, used_library="pandas", file_type="csv"
     )
+    # TODO: Store these snapshots to create a history, also do not save data inside the function!
     initialize_market_snapshot(
         etf_isins=master_data["isin"].dropna().unique().tolist(),
         out_path=PATH_ETF_MARKET_SNAPSHOT,
@@ -126,6 +127,7 @@ def run_stocks():
     logger.info("ETF Master Data loaded and preprocessed!")
 
     # Extract current ETF price data
+    # TODO: Store these snapshots to create a history
     etf_current_prices = extract_current_etf_prices(
         etfs=master_data[["isin", "symbol", "currency"]],
     )
