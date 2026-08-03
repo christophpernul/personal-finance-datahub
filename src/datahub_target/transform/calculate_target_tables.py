@@ -6,8 +6,11 @@ directly by the dashboard, so no calculations are required there anymore.
 
 import logging
 from functools import reduce
+from pathlib import Path
 
 import pandas as pd
+
+from utils.file_io import load_data
 
 logger = logging.getLogger(__name__)
 
@@ -198,6 +201,63 @@ def add_interest_income(
 
     result = incomes_wide.merge(wide[["date", *categories]], on="date", how="left")
     result[categories] = result[categories].fillna(0.0)
+    return result
+
+
+def load_investment_costs(filepath: Path) -> pd.DataFrame:
+    """Loads the combined investment-cost report (comdirect cost reports +
+    Trade Republic fees) and aggregates it into a monthly (month-end)
+    ``Investment Costs`` expense total.
+
+    The source file stores each cost in the ``Kosten`` column as a *positive*
+    EUR amount (a cost you paid), regardless of provider. The target expense
+    tables store outflows as negative amounts, so every cost is negated. A
+    *negative* cost in the file (e.g. the 2020 EUWAX-Gold credit) therefore
+    becomes a positive cost reduction.
+
+    Returns a dataframe with a month-end ``date`` column and a single
+    ``Investment Costs`` column, ready to be merged onto the wide expense table.
+    """
+    costs = load_data(filepath, sep=",", decimal=".")
+    costs["date"] = pd.to_datetime(costs["Datum"], format="%d.%m.%Y")
+
+    # Normalise to the expense sign convention: costs are stored positive, so
+    # negate them into negative outflows (a stored credit flips to a reduction).
+    costs["amount"] = -costs["Kosten"]
+
+    monthly = (
+        costs.groupby(pd.Grouper(key="date", freq="ME"))["amount"]
+        .sum()
+        .reset_index()
+        .rename(columns={"amount": "Investment Costs"})
+    )
+    return monthly
+
+
+def add_investment_costs(
+    expenses_wide: pd.DataFrame, investment_costs: pd.DataFrame
+) -> pd.DataFrame:
+    """Adds the monthly investment costs (comdirect cost reports + Trade Republic
+    fees) to the wide expense table as an ``Investment Costs`` column, matched on
+    month-end date. The amounts are already expense-signed (negative outflows) by
+    ``load_investment_costs``, so they are merged verbatim. Cashflow months
+    without any investment cost are filled with 0.0.
+
+    The column is added after the tag->category step, so it is intentionally not
+    part of the toshl category mapping."""
+    result = expenses_wide.merge(investment_costs, on="date", how="left")
+
+    # A cost dated in a month that is absent from the cashflow table would be
+    # silently dropped by the left merge; warn so it is not lost unnoticed.
+    unmatched = set(investment_costs["date"]).difference(set(expenses_wide["date"]))
+    if unmatched:
+        logger.warning(
+            "Investment cost months not present in the cashflow expense table "
+            "and therefore dropped: %s",
+            sorted(str(d.date()) for d in unmatched),
+        )
+
+    result["Investment Costs"] = result["Investment Costs"].fillna(0.0)
     return result
 
 

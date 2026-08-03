@@ -6,8 +6,10 @@ from src.datahub_target.transform.calculate_target_tables import (
     add_dividend_income,
     add_interest_income,
     add_investment_expenses,
+    add_investment_costs,
     add_rebalancing_income,
     add_rebalancing_expenses,
+    load_investment_costs,
 )
 
 
@@ -210,6 +212,66 @@ def test_add_interest_income_both_columns_present_when_one_kind_missing():
     result = add_interest_income(incomes_wide, interest)
     assert result["Tagesgeld"].tolist() == [12.0]
     assert result["Festgeld"].tolist() == [0.0]
+
+
+@pytest.fixture
+def investment_costs():
+    # month-end aggregated investment costs, already expense-signed (negative),
+    # as returned by load_investment_costs
+    return pd.DataFrame(
+        {
+            "date": pd.to_datetime(["2020-02-29", "2020-03-31"]),
+            "Investment Costs": [-12.5, -3.4],
+        }
+    )
+
+
+@pytest.mark.ut
+def test_add_investment_costs_merges_on_month(investment_costs):
+    expenses_wide = pd.DataFrame(
+        {
+            "date": pd.to_datetime(["2020-02-29", "2020-03-31"]),
+            "Home": [-100.0, -200.0],
+        }
+    )
+    result = add_investment_costs(expenses_wide, investment_costs)
+    assert result["Investment Costs"].tolist() == [-12.5, -3.4]
+
+
+@pytest.mark.ut
+def test_add_investment_costs_missing_month_filled_with_zero(investment_costs):
+    expenses_wide = pd.DataFrame(
+        {
+            "date": pd.to_datetime(["2020-01-31"]),
+            "Home": [-100.0],
+        }
+    )
+    result = add_investment_costs(expenses_wide, investment_costs)
+    assert result["Investment Costs"].tolist() == [0.0]
+
+
+@pytest.mark.ut
+def test_load_investment_costs_negates_and_aggregates(tmp_path):
+    # all costs are stored as positive amounts (regardless of provider); a
+    # negative stored cost is a credit that flips to a positive reduction.
+    csv = (
+        "Datum,Kosten,Anbieter,Kommentar,Name,ISIN,Note\n"
+        "31.12.2020,3.52,comdirect,Wertpapierkosten 2020,ETF A,ISIN1,WKN a\n"
+        "31.12.2020,-57.35,comdirect,Wertpapierkosten 2020,EUWAX,ISIN2,WKN b\n"
+        "30.04.2022,35.4,traderepublic,TER 2021 alle ETFs,TER 2021,,\n"
+        "20.01.2023,7.69,traderepublic,Steuerkorrektur,Gebuehren,,\n"
+    )
+    path = tmp_path / "comdirect_costs_combined.csv"
+    path.write_text(csv, encoding="utf-8")
+
+    result = load_investment_costs(path)
+    result = result.set_index("date")["Investment Costs"]
+
+    # Dec 2020: -(3.52 + -57.35) = -(-53.83) = 53.83 (net credit -> positive)
+    assert result[pd.Timestamp("2020-12-31")] == pytest.approx(53.83)
+    # costs negated into expenses and grouped to their month-end
+    assert result[pd.Timestamp("2022-04-30")] == pytest.approx(-35.4)
+    assert result[pd.Timestamp("2023-01-31")] == pytest.approx(-7.69)
 
 
 @pytest.mark.ut

@@ -12,6 +12,7 @@ from utils.file_io import get_config_file, save_data, load_data
 from constants import (
     TOSHL_CATEGORY_MAP,
     PATH_ETF_MONTHLY_INVESTMENTS,
+    PATH_INVESTMENT_COSTS,
     PATH_CASHFLOW_INCOMES_WIDE,
     PATH_CASHFLOW_EXPENSES_WIDE,
 )
@@ -21,8 +22,10 @@ from datahub_target.transform.calculate_target_tables import (
     add_dividend_income,
     add_interest_income,
     add_investment_expenses,
+    add_investment_costs,
     add_rebalancing_income,
     add_rebalancing_expenses,
+    load_investment_costs,
 )
 
 logger = logging.getLogger(__name__)
@@ -89,6 +92,11 @@ def calculate_cashflow_target_tables(
     incomes_wide = add_rebalancing_income(incomes_wide, monthly_rebalancing)
     expenses_wide = add_investment_expenses(expenses_wide, monthly_investments)
     expenses_wide = add_rebalancing_expenses(expenses_wide, monthly_rebalancing)
+
+    # Add the combined comdirect + Trade Republic investment costs as their own
+    # `Investment Costs` expense category (independent of the toshl categories).
+    investment_costs = load_investment_costs(PATH_INVESTMENT_COSTS)
+    expenses_wide = add_investment_costs(expenses_wide, investment_costs)
 
     save_data(data=incomes_wide, filepath=PATH_CASHFLOW_INCOMES_WIDE)
     save_data(data=expenses_wide, filepath=PATH_CASHFLOW_EXPENSES_WIDE)

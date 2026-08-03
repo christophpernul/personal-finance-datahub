@@ -35,6 +35,12 @@ PATH_STOCK_MERGERS = STOCKS_INPUT_DIR / "source_stock_mergers.ods"
 # Manually maintained stock splits (keyed by name); shares held before the split
 # date are multiplied by split_to / split_from.
 PATH_STOCK_SPLITS = STOCKS_INPUT_DIR / "source_stock_splits.ods"
+# Manually maintained investment-cost report: comdirect yearly cost reports
+# (per-ETF Wertpapierkosten + Depotentgelt) combined with Trade Republic fees.
+# Columns: Datum,Kosten,Anbieter,Kommentar,Name,ISIN,Note (comma-separated,
+# dot decimals, German dd.mm.yyyy dates, costs stored as positive amounts).
+# Feeds the `Investment Costs` expense category in the cashflow target table.
+PATH_INVESTMENT_COSTS = STOCKS_INPUT_DIR / "comdirect_costs_combined.csv"
 PATH_ETF_MASTER_DATA = SOURCE_DIR / "source_etf__master_data.csv"
 PATH_ETF_MARKET_SNAPSHOT = SOURCE_DIR / "source_etf__market_snapshot.csv"
 PATH_ETF_PRICE_CURRENT = SOURCE_DIR / "source_etf__price_current.csv"
