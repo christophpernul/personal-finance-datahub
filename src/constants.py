@@ -57,6 +57,9 @@ PATH_ETF_MONTHLY_DIVIDENDS = TRANSFORM_DIR / "transform_etf__monthly_dividends.c
 # Monthly received interest on cash deposits, split into the two account kinds
 # (Tagesgeld / Festgeld); sourced from the `Zinsen` sheet of the trades file.
 PATH_MONTHLY_INTEREST = TRANSFORM_DIR / "transform_stocks__monthly_interest.csv"
+# Monthly Riester pension contributions (an expense), summed from the
+# `Riester Buy` sheet of the trades file.
+PATH_MONTHLY_RIESTER = TRANSFORM_DIR / "transform_stocks__monthly_riester.csv"
 PATH_ETF_PORTFOLIO_VALUE = TRANSFORM_DIR / "transform_etf__portfolio_value.csv"
 
 # Individual stocks: transform stage (mirrors the ETF portfolio tables, but the

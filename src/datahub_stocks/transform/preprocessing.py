@@ -57,6 +57,11 @@ INTEREST_REQUIRED_COLUMNS = {
     "Betrag",
     "ISIN",
 }
+RIESTER_REQUIRED_COLUMNS = {
+    "Datum",
+    "Art",
+    "Betrag",
+}
 # The interest account ISIN prefix tells the two deposit kinds apart: ``ZT``
 # accounts are instant-access deposits (Tagesgeld), ``ZF`` accounts are
 # fixed-term deposits (Festgeld).
@@ -386,6 +391,49 @@ def aggregate_monthly_interest(interest: pd.DataFrame) -> pd.DataFrame:
     monthly = monthly[monthly["interest"] != 0.0]
     monthly["date"] = monthly["date"].dt.strftime("%Y-%m-%d")
     return monthly[["date", "category", "interest"]]
+
+
+def preprocess_riester(data: pd.DataFrame) -> pd.DataFrame:
+    """Normalises the ``Riester Buy`` sheet (contributions paid into the Riester
+    pension).
+
+    The sheet uses German column headers and lists every contribution (monthly
+    ``Riester Monatsbeitrag`` and one-off ``Riester Einmalzahlung``), told apart
+    by the ``Art`` column, with ``Betrag`` the positive amount paid in. Both kinds
+    are contributions and are treated the same, so the columns are reduced to
+    [date, amount] where `amount` (``Betrag``) is the positive amount paid.
+    """
+    _validate_columns(data, RIESTER_REQUIRED_COLUMNS, "riester")
+    data = data.rename(
+        columns={
+            "Datum": "date",
+            "Betrag": "amount",
+        }
+    )[["date", "amount"]]
+
+    if not pd.api.types.is_datetime64_any_dtype(data["date"]):
+        data = convert_columns_to_timestamp(data, column_formats={"date": "%d.%m.%Y"})
+
+    data["amount"] = pd.to_numeric(data["amount"], errors="coerce")
+    return data[["date", "amount"]]
+
+
+def aggregate_monthly_riester(riester: pd.DataFrame) -> pd.DataFrame:
+    """Aggregates the Riester contributions to a single monthly total.
+
+    Returns a long-format table with one row per month holding the summed
+    `riester` amount paid (a positive magnitude). Dates are the month-end (last
+    day of the month). Months without any contribution are not included."""
+    riester = riester.copy()
+    monthly = (
+        riester.groupby(pd.Grouper(key="date", freq="ME"))["amount"]
+        .sum()
+        .reset_index()
+        .rename(columns={"amount": "riester"})
+    )
+    monthly = monthly[monthly["riester"] != 0.0]
+    monthly["date"] = monthly["date"].dt.strftime("%Y-%m-%d")
+    return monthly[["date", "riester"]]
 
 
 def preprocess_splits(data: pd.DataFrame) -> pd.DataFrame:

@@ -10,6 +10,7 @@ from datahub_stocks.transform.preprocessing import (
     preprocess_master_data,
     preprocess_dividends,
     preprocess_interest,
+    preprocess_riester,
     preprocess_stock_trades,
     preprocess_splits,
     preprocess_rebalancing,
@@ -20,6 +21,7 @@ from datahub_stocks.transform.preprocessing import (
     aggregate_monthly_rebalancing,
     aggregate_monthly_dividends,
     aggregate_monthly_interest,
+    aggregate_monthly_riester,
     calculate_portfolio_value,
     combine_portfolio_values,
 )
@@ -44,6 +46,7 @@ from constants import (
     PATH_ETF_MONTHLY_REBALANCING,
     PATH_ETF_MONTHLY_DIVIDENDS,
     PATH_MONTHLY_INTEREST,
+    PATH_MONTHLY_RIESTER,
     PATH_ETF_PORTFOLIO_VALUE,
     PATH_STOCKS_SHARES_MONTHLY,
     PATH_STOCKS_PORTFOLIO_VALUE,
@@ -126,6 +129,13 @@ def run_stocks():
         load_data(PATH_STOCKS_TRADES, file_type="excel", sheet_name="Zinsen")
     )
     logger.info("Interest Data (Zinsen) loaded!")
+
+    # Riester pension contributions (an expense), tracked in the `Riester Buy`
+    # sheet; both monthly contributions and one-off payments are summed.
+    riester = preprocess_riester(
+        load_data(PATH_STOCKS_TRADES, file_type="excel", sheet_name="Riester Buy")
+    )
+    logger.info("Riester Data (Riester Buy) loaded!")
 
     etf_mergers = load_data(
         PATH_STOCK_MERGERS,
@@ -236,6 +246,11 @@ def run_stocks():
     save_data(monthly_interest, PATH_MONTHLY_INTEREST)
     logger.info("Monthly interest per category computed and saved!")
 
+    # Monthly Riester pension contributions (booked as an expense downstream)
+    monthly_riester = aggregate_monthly_riester(riester)
+    save_data(monthly_riester, PATH_MONTHLY_RIESTER)
+    logger.info("Monthly Riester contributions computed and saved!")
+
     # Calculate current portfolio value (ETFs and individual stocks). Rebalancing
     # trades are part of the holdings, so `etf_holdings` (regular + rebalancing)
     # supplies both the share counts and the invested-amount / cost basis.
@@ -265,6 +280,7 @@ def run_stocks():
         monthly_dividends,
         monthly_rebalancing,
         monthly_interest,
+        monthly_riester,
     )
 
 

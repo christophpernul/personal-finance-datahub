@@ -23,6 +23,7 @@ from datahub_target.transform.calculate_target_tables import (
     add_interest_income,
     add_investment_expenses,
     add_investment_costs,
+    add_riester_expenses,
     add_rebalancing_income,
     add_rebalancing_expenses,
     load_investment_costs,
@@ -38,6 +39,7 @@ def run_target(
     monthly_dividends: pd.DataFrame,
     monthly_rebalancing: pd.DataFrame,
     monthly_interest: pd.DataFrame,
+    monthly_riester: pd.DataFrame,
 ) -> None:
     """Calculates and stores all dashboard-ready target tables.
 
@@ -46,8 +48,8 @@ def run_target(
     cashflow_incomes / cashflow_expenses: transform-stage cashflow tables
         (monthly, multi-indexed by [date, tag]) as returned by
         `datahub_cashflow.run_cashflow`.
-    monthly_investments / monthly_dividends / monthly_rebalancing / monthly_interest:
-        transform-stage ETF and interest tables as returned by
+    monthly_investments / monthly_dividends / monthly_rebalancing / monthly_interest / monthly_riester:
+        transform-stage ETF, interest and Riester tables as returned by
         `datahub_stocks.run_stocks`.
     """
     calculate_cashflow_target_tables(
@@ -57,6 +59,7 @@ def run_target(
         monthly_dividends,
         monthly_rebalancing,
         monthly_interest,
+        monthly_riester,
     )
 
 
@@ -67,6 +70,7 @@ def calculate_cashflow_target_tables(
     monthly_dividends: pd.DataFrame,
     monthly_rebalancing: pd.DataFrame,
     monthly_interest: pd.DataFrame,
+    monthly_riester: pd.DataFrame,
 ) -> None:
     """Builds the wide-format cashflow tables, enriches them with the ETF
     monthly investment, dividend and rebalancing columns, and stores them as
@@ -97,6 +101,10 @@ def calculate_cashflow_target_tables(
     # `Investment Costs` expense category (independent of the toshl categories).
     investment_costs = load_investment_costs(PATH_INVESTMENT_COSTS)
     expenses_wide = add_investment_costs(expenses_wide, investment_costs)
+
+    # Add the Riester pension contributions as their own `Riester` expense
+    # category (independent of the toshl categories).
+    expenses_wide = add_riester_expenses(expenses_wide, monthly_riester)
 
     save_data(data=incomes_wide, filepath=PATH_CASHFLOW_INCOMES_WIDE)
     save_data(data=expenses_wide, filepath=PATH_CASHFLOW_EXPENSES_WIDE)
