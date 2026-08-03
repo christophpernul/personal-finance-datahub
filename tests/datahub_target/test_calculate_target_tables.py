@@ -4,6 +4,7 @@ import pytest
 from src.datahub_target.transform.calculate_target_tables import (
     add_investment_income,
     add_dividend_income,
+    add_interest_income,
     add_investment_expenses,
     add_rebalancing_income,
     add_rebalancing_expenses,
@@ -147,6 +148,68 @@ def test_add_dividend_income_missing_month_filled_with_zero(monthly_dividends):
     )
     result = add_dividend_income(incomes_wide, monthly_dividends)
     assert result["Dividends"].tolist() == [0.0]
+
+
+@pytest.fixture
+def monthly_interest():
+    # long-format per-category interest, date stored as string (month-end)
+    return pd.DataFrame(
+        {
+            "date": ["2020-02-29", "2020-02-29", "2020-03-31"],
+            "category": ["Tagesgeld", "Festgeld", "Tagesgeld"],
+            "interest": [10.0, 5.0, 8.0],
+        }
+    )
+
+
+@pytest.mark.ut
+def test_add_interest_income_pivots_categories(monthly_interest):
+    incomes_wide = pd.DataFrame(
+        {
+            "date": pd.to_datetime(["2020-02-29", "2020-03-31"]),
+            "Salary": [1000.0, 1000.0],
+        }
+    )
+    result = add_interest_income(incomes_wide, monthly_interest)
+    # each interest category becomes its own income column
+    assert result["Tagesgeld"].tolist() == [10.0, 8.0]
+    # March has no Festgeld interest -> filled with zero
+    assert result["Festgeld"].tolist() == [5.0, 0.0]
+    assert (result[["Tagesgeld", "Festgeld"]] >= 0).all().all()
+
+
+@pytest.mark.ut
+def test_add_interest_income_missing_month_filled_with_zero(monthly_interest):
+    incomes_wide = pd.DataFrame(
+        {
+            "date": pd.to_datetime(["2020-01-31"]),
+            "Salary": [1000.0],
+        }
+    )
+    result = add_interest_income(incomes_wide, monthly_interest)
+    assert result["Tagesgeld"].tolist() == [0.0]
+    assert result["Festgeld"].tolist() == [0.0]
+
+
+@pytest.mark.ut
+def test_add_interest_income_both_columns_present_when_one_kind_missing():
+    # only Tagesgeld interest exists in the source, but both columns must appear
+    interest = pd.DataFrame(
+        {
+            "date": ["2020-02-29"],
+            "category": ["Tagesgeld"],
+            "interest": [12.0],
+        }
+    )
+    incomes_wide = pd.DataFrame(
+        {
+            "date": pd.to_datetime(["2020-02-29"]),
+            "Salary": [1000.0],
+        }
+    )
+    result = add_interest_income(incomes_wide, interest)
+    assert result["Tagesgeld"].tolist() == [12.0]
+    assert result["Festgeld"].tolist() == [0.0]
 
 
 @pytest.mark.ut

@@ -25,6 +25,7 @@ cashflow_incomes, cashflow_expenses = run_cashflow()
     monthly_investments,
     monthly_dividends,
     monthly_rebalancing,
+    monthly_interest,
 ) = run_stocks()
 run_target(
     cashflow_incomes,
@@ -32,5 +33,6 @@ run_target(
     monthly_investments,
     monthly_dividends,
     monthly_rebalancing,
+    monthly_interest,
 )
 disable_existing_loggers = False

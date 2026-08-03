@@ -8,6 +8,8 @@ from src.datahub_stocks.transform.preprocessing import (
     aggregate_monthly_rebalancing,
     preprocess_dividends,
     aggregate_monthly_dividends,
+    preprocess_interest,
+    aggregate_monthly_interest,
     preprocess_stock_trades,
     preprocess_rebalancing,
     combine_portfolio_values,
@@ -235,6 +237,53 @@ def test_aggregate_monthly_dividends_combines_etf_and_stocks(
     assert round(result["dividend"].sum(), 2) == round(
         dividends_raw["Betrag"].sum() + stock_dividends_raw["Betrag"].sum(), 2
     )
+
+
+@pytest.fixture
+def interest_raw():
+    # mirrors the German-headed Zinsen sheet layout; Tagesgeld accounts carry a
+    # ``ZT`` ISIN prefix, Festgeld accounts a ``ZF`` prefix
+    return pd.DataFrame(
+        {
+            "Datum": ["1.2.2023", "1.2.2023", "13.12.2023"],
+            "Betrag": [3.19, 2.66, 80.40],
+            "Anbieter": ["traderepublic", "weltsparen", "weltsparen"],
+            "Kommentar": ["Zinsen", "Zinsen", "Festgeld"],
+            "Name": ["Zinsen", "Zinsen WS Tagesgeld", "Zinsen WS Festgeld"],
+            "ISIN": ["ZT0000", "ZT0001", "ZF0101"],
+        }
+    )
+
+
+@pytest.mark.ut
+def test_preprocess_interest_renames_and_categorizes(interest_raw):
+    result = preprocess_interest(interest_raw)
+    assert result.columns.tolist() == ["date", "category", "interest"]
+    assert pd.api.types.is_datetime64_any_dtype(result["date"])
+    # ISIN prefix maps to the deposit kind
+    assert result["category"].tolist() == ["Tagesgeld", "Tagesgeld", "Festgeld"]
+    assert result["interest"].sum() == pytest.approx(86.25)
+
+
+@pytest.mark.ut
+def test_preprocess_interest_rejects_unknown_isin_prefix(interest_raw):
+    bad = interest_raw.copy()
+    bad.loc[0, "ISIN"] = "XX9999"
+    with pytest.raises(AssertionError, match="unknown account ISIN prefix"):
+        preprocess_interest(bad)
+
+
+@pytest.mark.ut
+def test_aggregate_monthly_interest_sums_per_month_and_category(interest_raw):
+    result = aggregate_monthly_interest(preprocess_interest(interest_raw))
+    assert result.columns.tolist() == ["date", "category", "interest"]
+    # Feb 2023: both Tagesgeld rows collapse into a single category total
+    feb = result[result["date"] == "2023-02-28"].set_index("category")["interest"]
+    assert feb["Tagesgeld"] == pytest.approx(3.19 + 2.66)
+    dec = result[result["date"] == "2023-12-31"].set_index("category")["interest"]
+    assert dec["Festgeld"] == pytest.approx(80.40)
+    # one row per (month, category); no all-zero rows
+    assert len(result) == 2
 
 
 @pytest.fixture

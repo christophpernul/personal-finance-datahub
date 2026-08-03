@@ -9,6 +9,7 @@ from datahub_stocks.transform.preprocessing import (
     preprocess_mergers,
     preprocess_master_data,
     preprocess_dividends,
+    preprocess_interest,
     preprocess_stock_trades,
     preprocess_splits,
     preprocess_rebalancing,
@@ -18,6 +19,7 @@ from datahub_stocks.transform.preprocessing import (
     aggregate_monthly_investments,
     aggregate_monthly_rebalancing,
     aggregate_monthly_dividends,
+    aggregate_monthly_interest,
     calculate_portfolio_value,
     combine_portfolio_values,
 )
@@ -41,6 +43,7 @@ from constants import (
     PATH_ETF_MONTHLY_INVESTMENTS,
     PATH_ETF_MONTHLY_REBALANCING,
     PATH_ETF_MONTHLY_DIVIDENDS,
+    PATH_MONTHLY_INTEREST,
     PATH_ETF_PORTFOLIO_VALUE,
     PATH_STOCKS_SHARES_MONTHLY,
     PATH_STOCKS_PORTFOLIO_VALUE,
@@ -116,6 +119,13 @@ def run_stocks():
     stock_dividends = preprocess_dividends(stock_dividends)
     dividends = pd.concat([etf_dividends, stock_dividends], ignore_index=True)
     logger.info("Dividends Data (ETF and stocks) loaded!")
+
+    # Received interest on cash deposits, tracked in the `Zinsen` sheet and split
+    # into Tagesgeld (instant-access) and Festgeld (fixed-term) by account.
+    interest = preprocess_interest(
+        load_data(PATH_STOCKS_TRADES, file_type="excel", sheet_name="Zinsen")
+    )
+    logger.info("Interest Data (Zinsen) loaded!")
 
     etf_mergers = load_data(
         PATH_STOCK_MERGERS,
@@ -221,6 +231,11 @@ def run_stocks():
     save_data(monthly_dividends, PATH_ETF_MONTHLY_DIVIDENDS)
     logger.info("Monthly dividends per security computed and saved!")
 
+    # Monthly received interest per category (Tagesgeld / Festgeld)
+    monthly_interest = aggregate_monthly_interest(interest)
+    save_data(monthly_interest, PATH_MONTHLY_INTEREST)
+    logger.info("Monthly interest per category computed and saved!")
+
     # Calculate current portfolio value (ETFs and individual stocks). Rebalancing
     # trades are part of the holdings, so `etf_holdings` (regular + rebalancing)
     # supplies both the share counts and the invested-amount / cost basis.
@@ -244,7 +259,13 @@ def run_stocks():
         f"Combined ETF + stock portfolio value saved in {PATH_PORTFOLIO_VALUE_COMBINED}"
     )
 
-    return portfolio_value, monthly_investments, monthly_dividends, monthly_rebalancing
+    return (
+        portfolio_value,
+        monthly_investments,
+        monthly_dividends,
+        monthly_rebalancing,
+        monthly_interest,
+    )
 
 
 if __name__ == "__main__":

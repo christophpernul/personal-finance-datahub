@@ -48,6 +48,9 @@ PATH_ETF_MONTHLY_INVESTMENTS = TRANSFORM_DIR / "transform_etf__monthly_investmen
 # investments because rebalancing sells fund the rebalancing buys.
 PATH_ETF_MONTHLY_REBALANCING = TRANSFORM_DIR / "transform_etf__monthly_rebalancing.csv"
 PATH_ETF_MONTHLY_DIVIDENDS = TRANSFORM_DIR / "transform_etf__monthly_dividends.csv"
+# Monthly received interest on cash deposits, split into the two account kinds
+# (Tagesgeld / Festgeld); sourced from the `Zinsen` sheet of the trades file.
+PATH_MONTHLY_INTEREST = TRANSFORM_DIR / "transform_stocks__monthly_interest.csv"
 PATH_ETF_PORTFOLIO_VALUE = TRANSFORM_DIR / "transform_etf__portfolio_value.csv"
 
 # Individual stocks: transform stage (mirrors the ETF portfolio tables, but the

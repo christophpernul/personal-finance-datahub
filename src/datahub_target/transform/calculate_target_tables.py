@@ -170,6 +170,37 @@ def add_dividend_income(
     return result
 
 
+def add_interest_income(
+    incomes_wide: pd.DataFrame, monthly_interest: pd.DataFrame
+) -> pd.DataFrame:
+    """Adds the monthly received interest to the wide cashflow income table as a
+    `Tagesgeld` and a `Festgeld` column, matched on month-end date. The
+    per-category monthly interest table is pivoted so each interest category
+    becomes its own income column. Interest amounts are positive, matching the
+    sign of the income table. Both columns are always present (filled with 0.0 in
+    months without interest of that kind).
+
+    The columns are added after the tag->category step, so they are intentionally
+    not part of the toshl category mapping."""
+    categories = ["Tagesgeld", "Festgeld"]
+    interest = monthly_interest.copy()
+    interest["date"] = pd.to_datetime(interest["date"])
+    wide = (
+        interest.pivot_table(
+            index="date", columns="category", values="interest", aggfunc="sum"
+        )
+        .reset_index()
+        .rename_axis(columns=None)
+    )
+    for category in categories:
+        if category not in wide.columns:
+            wide[category] = 0.0
+
+    result = incomes_wide.merge(wide[["date", *categories]], on="date", how="left")
+    result[categories] = result[categories].fillna(0.0)
+    return result
+
+
 def add_investment_expenses(
     expenses_wide: pd.DataFrame, monthly_investments: pd.DataFrame
 ) -> pd.DataFrame:

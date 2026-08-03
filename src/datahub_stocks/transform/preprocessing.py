@@ -52,6 +52,18 @@ DIVIDENDS_REQUIRED_COLUMNS = {
     "Name",
     "ISIN",
 }
+INTEREST_REQUIRED_COLUMNS = {
+    "Datum",
+    "Betrag",
+    "ISIN",
+}
+# The interest account ISIN prefix tells the two deposit kinds apart: ``ZT``
+# accounts are instant-access deposits (Tagesgeld), ``ZF`` accounts are
+# fixed-term deposits (Festgeld).
+INTEREST_ISIN_PREFIX_CATEGORY = {
+    "ZT": "Tagesgeld",
+    "ZF": "Festgeld",
+}
 STOCK_TRADES_REQUIRED_COLUMNS = {
     "Datum",
     "Art",
@@ -321,6 +333,59 @@ def aggregate_monthly_dividends(dividends: pd.DataFrame) -> pd.DataFrame:
     monthly = monthly[monthly["dividend"] != 0.0]
     monthly["date"] = monthly["date"].dt.strftime("%Y-%m-%d")
     return monthly[["date", "isin", "name", "dividend"]]
+
+
+def preprocess_interest(data: pd.DataFrame) -> pd.DataFrame:
+    """Normalises the ``Zinsen`` sheet (received interest on cash deposits).
+
+    The sheet uses German column headers and mixes two kinds of interest, told
+    apart by the account ISIN prefix (see ``INTEREST_ISIN_PREFIX_CATEGORY``):
+    ``ZT`` accounts are instant-access deposits (``Tagesgeld``, e.g. the trade
+    republic cash interest and the weltsparen / DKB Tagesgeld accounts) and
+    ``ZF`` accounts are fixed-term deposits (``Festgeld``). The relevant columns
+    are reduced to [date, category, interest], where `category` is
+    ``Tagesgeld``/``Festgeld`` and `interest` (``Betrag``) is the positive amount
+    received.
+    """
+    _validate_columns(data, INTEREST_REQUIRED_COLUMNS, "interest")
+    data = data.rename(
+        columns={
+            "Datum": "date",
+            "Betrag": "interest",
+            "ISIN": "isin",
+        }
+    )[["date", "isin", "interest"]]
+
+    if not pd.api.types.is_datetime64_any_dtype(data["date"]):
+        data = convert_columns_to_timestamp(data, column_formats={"date": "%d.%m.%Y"})
+
+    data["interest"] = pd.to_numeric(data["interest"], errors="coerce")
+    data = strip_vals(data, ["isin"])
+    data["category"] = data["isin"].str[:2].map(INTEREST_ISIN_PREFIX_CATEGORY)
+    unmapped = sorted(data.loc[data["category"].isna(), "isin"].unique())
+    assert not unmapped, (
+        f"Interest rows with an unknown account ISIN prefix (expected one of "
+        f"{sorted(INTEREST_ISIN_PREFIX_CATEGORY)}): {unmapped}"
+    )
+    return data[["date", "category", "interest"]]
+
+
+def aggregate_monthly_interest(interest: pd.DataFrame) -> pd.DataFrame:
+    """Aggregates received interest per category (``Tagesgeld``/``Festgeld``) by
+    month.
+
+    Returns a long-format table with one row per (month, category) holding the
+    summed `interest` amount. Dates are the month-end (last day of the month).
+    Months without any interest for a category are not included."""
+    interest = interest.copy()
+    monthly = (
+        interest.groupby([pd.Grouper(key="date", freq="ME"), "category"])["interest"]
+        .sum()
+        .reset_index()
+    )
+    monthly = monthly[monthly["interest"] != 0.0]
+    monthly["date"] = monthly["date"].dt.strftime("%Y-%m-%d")
+    return monthly[["date", "category", "interest"]]
 
 
 def preprocess_splits(data: pd.DataFrame) -> pd.DataFrame:
