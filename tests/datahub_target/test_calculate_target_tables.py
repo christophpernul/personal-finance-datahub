@@ -7,6 +7,7 @@ from src.datahub_target.transform.calculate_target_tables import (
     add_interest_income,
     add_investment_expenses,
     add_investment_costs,
+    add_riester_expenses,
     add_rebalancing_income,
     add_rebalancing_expenses,
     load_investment_costs,
@@ -272,6 +273,43 @@ def test_load_investment_costs_negates_and_aggregates(tmp_path):
     # costs negated into expenses and grouped to their month-end
     assert result[pd.Timestamp("2022-04-30")] == pytest.approx(-35.4)
     assert result[pd.Timestamp("2023-01-31")] == pytest.approx(-7.69)
+
+
+@pytest.fixture
+def monthly_riester():
+    # month-end aggregated Riester contributions, stored as a positive magnitude
+    # (as returned by aggregate_monthly_riester)
+    return pd.DataFrame(
+        {
+            "date": ["2020-02-29", "2020-03-31"],
+            "riester": [160.0, 166.0],
+        }
+    )
+
+
+@pytest.mark.ut
+def test_add_riester_expenses_are_negated(monthly_riester):
+    expenses_wide = pd.DataFrame(
+        {
+            "date": pd.to_datetime(["2020-02-29", "2020-03-31"]),
+            "Home": [-100.0, -200.0],
+        }
+    )
+    result = add_riester_expenses(expenses_wide, monthly_riester)
+    # contributions stored as negative outflows, matching the expense table
+    assert result["Riester"].tolist() == [-160.0, -166.0]
+
+
+@pytest.mark.ut
+def test_add_riester_expenses_missing_month_filled_with_zero(monthly_riester):
+    expenses_wide = pd.DataFrame(
+        {
+            "date": pd.to_datetime(["2020-01-31"]),
+            "Home": [-100.0],
+        }
+    )
+    result = add_riester_expenses(expenses_wide, monthly_riester)
+    assert result["Riester"].tolist() == [0.0]
 
 
 @pytest.mark.ut

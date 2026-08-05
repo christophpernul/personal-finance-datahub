@@ -284,3 +284,21 @@ def add_investment_expenses(
         ["Investment", "order_costs"]
     ].fillna(0.0)
     return result
+
+
+def add_riester_expenses(
+    expenses_wide: pd.DataFrame, monthly_riester: pd.DataFrame
+) -> pd.DataFrame:
+    """Adds the monthly Riester pension contributions as a `Riester` column to the
+    wide cashflow expense table, matched on month-end date. The contributions are
+    negated so they follow the expense table's convention of storing outflows as
+    negative amounts. Months without a contribution are filled with 0.0.
+
+    The column is added after the tag->category step, so it is intentionally not
+    part of the toshl category mapping."""
+    riester = monthly_riester.copy()
+    riester["date"] = pd.to_datetime(riester["date"])
+    riester["Riester"] = -riester["riester"]
+    result = expenses_wide.merge(riester[["date", "Riester"]], on="date", how="left")
+    result["Riester"] = result["Riester"].fillna(0.0)
+    return result

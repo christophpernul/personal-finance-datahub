@@ -10,6 +10,8 @@ from src.datahub_stocks.transform.preprocessing import (
     aggregate_monthly_dividends,
     preprocess_interest,
     aggregate_monthly_interest,
+    preprocess_riester,
+    aggregate_monthly_riester,
     preprocess_stock_trades,
     preprocess_rebalancing,
     combine_portfolio_values,
@@ -283,6 +285,46 @@ def test_aggregate_monthly_interest_sums_per_month_and_category(interest_raw):
     dec = result[result["date"] == "2023-12-31"].set_index("category")["interest"]
     assert dec["Festgeld"] == pytest.approx(80.40)
     # one row per (month, category); no all-zero rows
+    assert len(result) == 2
+
+
+@pytest.fixture
+def riester_raw():
+    # mirrors the German-headed `Riester Buy` sheet layout; both the monthly
+    # contribution and the one-off payment are contributions (an expense)
+    return pd.DataFrame(
+        {
+            "Datum": ["18.11.2019", "22.11.2019", "2.12.2019"],
+            "Art": [
+                "Riester Monatsbeitrag",
+                "Riester Einmalzahlung",
+                "Riester Monatsbeitrag",
+            ],
+            "Betrag": [165.0, 1607.9, 160.0],
+            "Kommentar": [None, "7.9 EUR Spesen", None],
+        }
+    )
+
+
+@pytest.mark.ut
+def test_preprocess_riester_renames_and_parses(riester_raw):
+    result = preprocess_riester(riester_raw)
+    assert result.columns.tolist() == ["date", "amount"]
+    assert pd.api.types.is_datetime64_any_dtype(result["date"])
+    # both contribution kinds are kept, amounts stay positive
+    assert result["amount"].tolist() == [165.0, 1607.9, 160.0]
+
+
+@pytest.mark.ut
+def test_aggregate_monthly_riester_sums_per_month(riester_raw):
+    result = aggregate_monthly_riester(preprocess_riester(riester_raw))
+    assert result.columns.tolist() == ["date", "riester"]
+    # Nov 2019 sums the monthly contribution and the one-off payment
+    nov = result[result["date"] == "2019-11-30"]["riester"]
+    assert nov.iloc[0] == pytest.approx(165.0 + 1607.9)
+    dec = result[result["date"] == "2019-12-31"]["riester"]
+    assert dec.iloc[0] == pytest.approx(160.0)
+    # one row per month; no all-zero rows
     assert len(result) == 2
 
 
