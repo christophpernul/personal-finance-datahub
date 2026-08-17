@@ -72,9 +72,22 @@ PATH_PORTFOLIO_VALUE_COMBINED = TRANSFORM_DIR / "transform_portfolio__value.csv"
 
 # --- Cashflow: transform stage ---
 PATH_CASHFLOW_COMBINED = TRANSFORM_DIR / "transform_cashflow__toshl_cashflow.csv"
+# Single toshl transactions, split by the sign of their own amount
 PATH_CASHFLOW_INCOMES = TRANSFORM_DIR / "transform_cashflow__incomes.csv"
 PATH_CASHFLOW_EXPENSES = TRANSFORM_DIR / "transform_cashflow__expenses.csv"
+# The same transactions summed per month and tag
+PATH_CASHFLOW_INCOMES_MONTHLY = (
+    TRANSFORM_DIR / "transform_cashflow__incomes_monthly.csv"
+)
+PATH_CASHFLOW_EXPENSES_MONTHLY = (
+    TRANSFORM_DIR / "transform_cashflow__expenses_monthly.csv"
+)
 
 # --- Cashflow: target stage (dashboard-ready) ---
-PATH_CASHFLOW_INCOMES_WIDE = TARGET_DIR / "target_cashflow__incomes.csv"
-PATH_CASHFLOW_EXPENSES_WIDE = TARGET_DIR / "target_cashflow__expenses.csv"
+# Single transactions across all sources (toshl, ETF trades, dividends,
+# interest, Riester, investment costs), columns [date, tag, category, amount]
+PATH_CASHFLOW_INCOMES_TARGET = TARGET_DIR / "target_cashflow__incomes.csv"
+PATH_CASHFLOW_EXPENSES_TARGET = TARGET_DIR / "target_cashflow__expenses.csv"
+# The same transactions aggregated per month, one column per category
+PATH_CASHFLOW_INCOMES_WIDE = TARGET_DIR / "target_cashflow__incomes_monthly.csv"
+PATH_CASHFLOW_EXPENSES_WIDE = TARGET_DIR / "target_cashflow__expenses_monthly.csv"

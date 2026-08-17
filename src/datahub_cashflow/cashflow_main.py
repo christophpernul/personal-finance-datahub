@@ -9,10 +9,13 @@ from constants import (
     PATH_CASHFLOW_COMBINED,
     PATH_CASHFLOW_INCOMES,
     PATH_CASHFLOW_EXPENSES,
+    PATH_CASHFLOW_INCOMES_MONTHLY,
+    PATH_CASHFLOW_EXPENSES_MONTHLY,
 )
 from datahub_cashflow.transform.transform_cashflow_data import (
     update_toshl_cashflow,
     split_cashflow_data,
+    aggregate_cashflow_monthly,
     cleaning_cashflow,
 )
 
@@ -22,8 +25,8 @@ logger = logging.getLogger(__name__)
 def run_cashflow() -> tuple[pd.DataFrame, pd.DataFrame]:
     """Runs the cashflow transform stage.
 
-    Returns the monthly, multi-indexed ([date, tag]) income and expense tables
-    so the target stage (`datahub_target.run_target`) can build the
+    Returns the transaction-level ([date, tag, amount]) income and expense
+    tables so the target stage (`datahub_target.run_target`) can build the
     dashboard-ready tables from them.
     """
     # Update complete cashflow data from Toshl
@@ -41,7 +44,7 @@ def run_cashflow() -> tuple[pd.DataFrame, pd.DataFrame]:
     cleaned_cashflow = cleaning_cashflow(combined_cashflow)
     logger.info(f"Cashflow data cleaned!")
 
-    # Split into monthly incomes and expenses
+    # Split into single income and expense transactions
     incomes, expenses = split_cashflow_data(cleaned_cashflow)
     save_data(
         data=incomes,
@@ -51,7 +54,18 @@ def run_cashflow() -> tuple[pd.DataFrame, pd.DataFrame]:
         data=expenses,
         filepath=PATH_CASHFLOW_EXPENSES,
     )
-    logger.info("Cashflow incomes and expenses saved in transform stage")
+    logger.info("Cashflow income and expense transactions saved in transform stage")
+
+    # Additionally store the monthly view of both tables
+    save_data(
+        data=aggregate_cashflow_monthly(incomes),
+        filepath=PATH_CASHFLOW_INCOMES_MONTHLY,
+    )
+    save_data(
+        data=aggregate_cashflow_monthly(expenses),
+        filepath=PATH_CASHFLOW_EXPENSES_MONTHLY,
+    )
+    logger.info("Monthly cashflow incomes and expenses saved in transform stage")
 
     return incomes, expenses
 
