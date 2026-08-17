@@ -210,8 +210,16 @@ def run_stocks():
     save_data(stock_shares, PATH_STOCKS_SHARES_MONTHLY)
     logger.info("Monthly stock share holdings computed and saved!")
 
-    # Monthly net invested amount and order costs (regular ETF trades only)
-    monthly_investments = aggregate_monthly_investments(etf_portfolio)
+    # Cashflow-relevant investment transactions: the regular ETF trades plus the
+    # non-portfolio stock trades (e.g. the expired Put Option), which are booked
+    # as a plain investment expense rather than as a holding. Rebalancing trades
+    # are excluded; only their monthly net is booked (see below).
+    investment_trades = pd.concat(
+        [etf_portfolio, stock_non_portfolio], ignore_index=True
+    )
+
+    # Monthly net invested amount and order costs of those same trades
+    monthly_investments = aggregate_monthly_investments(investment_trades)
     save_data(monthly_investments, PATH_ETF_MONTHLY_INVESTMENTS)
     logger.info("Monthly investments and order costs computed and saved!")
 
@@ -221,20 +229,6 @@ def run_stocks():
     monthly_rebalancing = aggregate_monthly_rebalancing(etf_rebalancing)
     save_data(monthly_rebalancing, PATH_ETF_MONTHLY_REBALANCING)
     logger.info("Monthly net rebalancing cashflow computed and saved!")
-
-    # Non-portfolio stock trades (e.g. the expired Put Option) are recorded as an
-    # additional investment expense in the cashflow, so fold them into the
-    # monthly investments handed to the target stage (buys -> expense_investment).
-    if not stock_non_portfolio.empty:
-        other_investments = aggregate_monthly_investments(stock_non_portfolio)
-        monthly_investments = (
-            pd.concat([monthly_investments, other_investments], ignore_index=True)
-            .groupby("date", as_index=False)[
-                ["expense_investment", "income_investment", "order_costs"]
-            ]
-            .sum()
-        )
-        logger.info("Non-portfolio stock trades added as investment expenses!")
 
     # Monthly received dividends per security (ETFs and individual stocks)
     monthly_dividends = aggregate_monthly_dividends(dividends)
@@ -274,13 +268,17 @@ def run_stocks():
         f"Combined ETF + stock portfolio value saved in {PATH_PORTFOLIO_VALUE_COMBINED}"
     )
 
+    # The target stage books single transactions, so it gets the transaction-level
+    # tables; the monthly aggregates above stay transform-stage outputs. Only
+    # rebalancing is handed over monthly, since only its monthly net is a real
+    # cashflow (the sells fund the buys).
     return (
         portfolio_value,
-        monthly_investments,
-        monthly_dividends,
+        investment_trades,
+        dividends,
         monthly_rebalancing,
-        monthly_interest,
-        monthly_riester,
+        interest,
+        riester,
     )
 
 
