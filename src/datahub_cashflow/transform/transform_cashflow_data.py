@@ -141,7 +141,12 @@ def cleaning_cashflow(df: pd.DataFrame) -> pd.DataFrame:
 
 def split_cashflow_data(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
-    Splits whole cashflow data into incomes and expenses, groups it monthly and sums amounts per tag
+    Splits whole cashflow data into single income and expense transactions.
+
+    The sign of a transaction's own amount alone decides which side it belongs
+    to, so a refund booked on an expense tag is an income and does not merely
+    reduce that tag's expense total. No aggregation happens here; use
+    `aggregate_cashflow_monthly` for the monthly view.
 
     Parameters
     ----------
@@ -149,19 +154,41 @@ def split_cashflow_data(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
 
     Returns
     -------
-    Tuple of dataframes holding incomes and expenses, each grouped by month
+    Tuple of dataframes holding the income and the expense transactions
     """
     needed_columns = ["tag", "date", "amount"]
     assert set(needed_columns).intersection(set(df.columns)) == set(
         needed_columns
     ), "Columns missing! Need: {0}, Have: {1}".format(needed_columns, list(df.columns))
 
-    df_grouped = df.groupby([pd.Grouper(key="date", freq="ME"), "tag"]).sum()
+    transactions = df[["date", "tag", "amount"]]
 
-    incomes = df_grouped[df_grouped["amount"] > 0.0].copy()
-    expenses = df_grouped[df_grouped["amount"] <= 0.0].copy()
+    incomes = transactions[transactions["amount"] > 0.0].reset_index(drop=True)
+    expenses = transactions[transactions["amount"] <= 0.0].reset_index(drop=True)
 
     return incomes, expenses
+
+
+def aggregate_cashflow_monthly(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Sums transaction-level cashflow data per month and tag.
+
+    Parameters
+    ----------
+    df  Cashflow transactions with columns ["tag", "date", "amount"]
+
+    Returns
+    -------
+    Dataframe with columns [date, tag, amount] where date is the month-end
+    """
+    needed_columns = ["tag", "date", "amount"]
+    assert set(needed_columns).intersection(set(df.columns)) == set(
+        needed_columns
+    ), "Columns missing! Need: {0}, Have: {1}".format(needed_columns, list(df.columns))
+
+    return df.groupby([pd.Grouper(key="date", freq="ME"), "tag"], as_index=False)[
+        "amount"
+    ].sum()
 
 
 def combine_incomes(

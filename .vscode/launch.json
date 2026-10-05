@@ -1,0 +1,18 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Datahub: run.py",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/src/run.py",
+      // run.py imports the datahub packages as top-level modules, and
+      // get_config_file() looks for toshl_tag_categorization.json in the
+      // parents of the cwd -- both only work from inside src/.
+      "cwd": "${workspaceFolder}/src",
+      "python": "${workspaceFolder}/.venv/Scripts/python.exe",
+      "console": "integratedTerminal",
+      "justMyCode": true
+    }
+  ]
+}

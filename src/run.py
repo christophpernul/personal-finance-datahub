@@ -22,19 +22,19 @@ cashflow_incomes, cashflow_expenses = run_cashflow()
 
 (
     portfolio_value,
-    monthly_investments,
-    monthly_dividends,
+    investment_trades,
+    dividends,
     monthly_rebalancing,
-    monthly_interest,
-    monthly_riester,
+    interest,
+    riester,
 ) = run_stocks()
 run_target(
     cashflow_incomes,
     cashflow_expenses,
-    monthly_investments,
-    monthly_dividends,
+    investment_trades,
+    dividends,
     monthly_rebalancing,
-    monthly_interest,
-    monthly_riester,
+    interest,
+    riester,
 )
 disable_existing_loggers = False
