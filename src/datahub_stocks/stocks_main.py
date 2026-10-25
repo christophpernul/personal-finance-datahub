@@ -24,6 +24,7 @@ from datahub_stocks.transform.preprocessing import (
     aggregate_monthly_riester,
     calculate_portfolio_value,
     combine_portfolio_values,
+    build_portfolio_cashflows,
 )
 from datahub_stocks.extract.extract_master_data import (
     extract_current_etf_prices,
@@ -51,6 +52,7 @@ from constants import (
     PATH_STOCKS_SHARES_MONTHLY,
     PATH_STOCKS_PORTFOLIO_VALUE,
     PATH_PORTFOLIO_VALUE_COMBINED,
+    PATH_PORTFOLIO_CASHFLOWS,
 )
 
 
@@ -267,6 +269,25 @@ def run_stocks():
     logger.info(
         f"Combined ETF + stock portfolio value saved in {PATH_PORTFOLIO_VALUE_COMBINED}"
     )
+
+    # Every dated cashflow per ETF/stock (all trades incl. rebalancing and the
+    # non-portfolio stock trades, dividends) plus the current value, for the
+    # money-weighted returns. The prices above are fetched today.
+    portfolio_cashflows = build_portfolio_cashflows(
+        trades=pd.concat(
+            [
+                etf_holdings.assign(security_type="ETF"),
+                stock_trades.assign(security_type="Aktie"),
+            ],
+            ignore_index=True,
+        ),
+        dividends=dividends,
+        portfolio_value=combined_portfolio_value,
+        mergers=etf_mergers,
+        valuation_date=pd.Timestamp.today().normalize(),
+    )
+    save_data(portfolio_cashflows, PATH_PORTFOLIO_CASHFLOWS)
+    logger.info(f"Portfolio cashflows saved in {PATH_PORTFOLIO_CASHFLOWS}")
 
     # The target stage books single transactions, so it gets the transaction-level
     # tables; the monthly aggregates above stay transform-stage outputs. Only

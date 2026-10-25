@@ -16,6 +16,7 @@ from src.datahub_stocks.transform.preprocessing import (
     preprocess_rebalancing,
     combine_portfolio_values,
     apply_splits,
+    build_portfolio_cashflows,
 )
 
 
@@ -565,3 +566,46 @@ def test_apply_splits_ignores_other_securities(tesla_split):
     )
     result = apply_splits(portfolio, tesla_split)
     assert result["shares"].iloc[0] == 5.0
+
+
+@pytest.mark.ut
+def test_build_portfolio_cashflows_signs_dividends_and_value():
+    trades = pd.DataFrame(
+        {
+            "date": pd.to_datetime(["2023-01-10", "2024-03-05", "2023-02-01"]),
+            "isin": ["IE1", "IE1", "NVIDIA"],
+            "total_investment": [1000.0, -400.0, 300.0],  # buy, sell, buy
+            "cost": [1.0, 1.0, float("nan")],
+            "trade_type": ["buy", "sell", "buy"],
+            "security_type": ["ETF", "ETF", "Aktie"],
+        }
+    )
+    dividends = pd.DataFrame(
+        {
+            "date": pd.to_datetime(["2023-06-30", "2023-07-31", "2023-08-31"]),
+            "isin": ["OLD1", "", ""],
+            "name": ["Old ETF", "Nvidia", "Mercedes Benz"],
+            "dividend": [5.0, 2.0, 3.0],
+        }
+    )
+    value = pd.DataFrame(
+        {
+            "isin": ["IE1", "NVIDIA"],
+            "value": [900.0, 500.0],
+            "security_type": ["ETF", "Aktie"],
+        }
+    )
+    mergers = pd.DataFrame({"isin_old": ["OLD1"], "isin_new": ["IE1"]})
+
+    result = build_portfolio_cashflows(
+        trades, dividends, value, mergers, pd.Timestamp("2026-10-25")
+    )
+
+    flows = result.groupby(["isin", "type"])["amount"].sum()
+    assert flows["IE1", "buy"] == pytest.approx(-1001.0)  # spend + fee
+    assert flows["IE1", "sell"] == pytest.approx(399.0)  # proceeds - fee
+    assert flows["IE1", "dividend"] == pytest.approx(5.0)  # merged ISIN
+    assert flows["NVIDIA", "dividend"] == pytest.approx(2.0)  # name, any case
+    assert flows["NVIDIA", "value"] == pytest.approx(500.0)
+    assert "Mercedes Benz" not in result["isin"].values  # no trades
+    assert (result.loc[result["type"] == "value", "date"] == "2026-10-25").all()

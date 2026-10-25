@@ -570,6 +570,85 @@ def aggregate_monthly_rebalancing(rebalancing: pd.DataFrame) -> pd.DataFrame:
     return monthly[["date", "expense_rebalancing", "income_rebalancing"]]
 
 
+def build_portfolio_cashflows(
+    trades: pd.DataFrame,
+    dividends: pd.DataFrame,
+    portfolio_value: pd.DataFrame,
+    mergers: pd.DataFrame,
+    valuation_date: pd.Timestamp,
+) -> pd.DataFrame:
+    """Lists every cashflow of every ETF and stock from the investor's view, so
+    money-weighted (XIRR) returns can be computed downstream.
+
+    Parameters
+    ----------
+    trades: preprocessed buys, sells and rebalancing trades (after mergers) with
+        [date, isin, total_investment, cost, trade_type, security_type]
+    dividends: preprocessed dividends [date, isin, name, dividend]
+    portfolio_value: combined portfolio value (`combine_portfolio_values`)
+    mergers: preprocessed mergers, to move dividends of a merged ETF onto its
+        successor ISIN
+    valuation_date: date of the current prices in `portfolio_value`
+
+    Returns [date, isin, security_type, type, amount] where `type` is buy, sell,
+    dividend or value. `amount` is negative for money paid in (buy spend and
+    order fees) and positive for money received (sell proceeds net of fees,
+    dividends); the `value` rows hold the current value of every held position
+    as if it were sold on `valuation_date`.
+    """
+    trade_flows = pd.DataFrame(
+        {
+            "date": trades["date"],
+            "isin": trades["isin"],
+            "security_type": trades["security_type"],
+            "type": trades["trade_type"],
+            # total_investment: +spent on buys, -proceeds on sells
+            "amount": -(trades["total_investment"] + trades["cost"].fillna(0.0)),
+        }
+    )
+
+    # Stock dividends carry no ISIN and stocks are keyed by name, whose spelling
+    # can differ in case between the sheets (e.g. Nvidia / NVIDIA).
+    security_types = trades.groupby("isin")["security_type"].first()
+    key_by_lower = {key.lower(): key for key in security_types.index}
+    successor = dict(zip(mergers["isin_old"], mergers["isin_new"]))
+    dividend_key = (
+        dividends["isin"]
+        .where(dividends["isin"] != "", dividends["name"])
+        .replace(successor)
+        .map(lambda key: key_by_lower.get(key.lower(), key))
+    )
+    unknown = sorted(set(dividend_key) - set(security_types.index))
+    if unknown:
+        logger.warning(f"Dividends without any trade are left out: {unknown}")
+    known = dividend_key.isin(security_types.index)
+    dividend_flows = pd.DataFrame(
+        {
+            "date": dividends.loc[known, "date"],
+            "isin": dividend_key[known],
+            "security_type": dividend_key[known].map(security_types),
+            "type": "dividend",
+            "amount": dividends.loc[known, "dividend"],
+        }
+    )
+
+    value_flows = pd.DataFrame(
+        {
+            "date": valuation_date,
+            "isin": portfolio_value["isin"],
+            "security_type": portfolio_value["security_type"],
+            "type": "value",
+            "amount": portfolio_value["value"],
+        }
+    )
+
+    cashflows = pd.concat(
+        [trade_flows, dividend_flows, value_flows], ignore_index=True
+    ).dropna(subset=["amount"])
+    cashflows["date"] = pd.to_datetime(cashflows["date"]).dt.strftime("%Y-%m-%d")
+    return cashflows.sort_values(["date", "isin"]).reset_index(drop=True)
+
+
 def combine_portfolio_values(
     etf_value: pd.DataFrame, stock_value: pd.DataFrame
 ) -> pd.DataFrame:
