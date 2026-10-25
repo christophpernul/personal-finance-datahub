@@ -46,7 +46,8 @@ def run_target(
     Parameters
     ----------
     cashflow_incomes / cashflow_expenses: transform-stage cashflow tables
-        holding single toshl transactions ([date, tag, amount]) as returned by
+        holding single toshl transactions ([date, tag, amount, description]) as
+        returned by
         `datahub_cashflow.run_cashflow`.
     investment_trades / dividends / interest / riester: transform-stage ETF,
         stock, interest and Riester tables holding single transactions, as

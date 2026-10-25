@@ -5,8 +5,10 @@ directly by the dashboard, so no calculations are required there anymore.
 
 Cashflow is built at transaction level first: every source (toshl, ETF and
 stock trades, dividends, interest, Riester, investment costs) is turned into
-rows of [date, tag, category, amount], where `amount` is positive for an inflow
-and negative for an outflow. The monthly cashflow tables are then aggregated
+rows of [date, tag, category, amount, description], where `amount` is positive
+for an inflow and negative for an outflow and `description` is the free-text
+toshl comment (empty for the other sources). The monthly cashflow tables are
+then aggregated
 from those very same transactions, so both granularities always agree.
 """
 
@@ -20,16 +22,17 @@ from utils.file_io import load_data
 logger = logging.getLogger(__name__)
 
 # Schema of every transaction-level cashflow table
-TRANSACTION_COLUMNS = ["date", "tag", "category", "amount"]
+TRANSACTION_COLUMNS = ["date", "tag", "category", "amount", "description"]
 
 
 def _build_transactions(
-    dates: pd.Series, tag, category, amounts: pd.Series
+    dates: pd.Series, tag, category, amounts: pd.Series, description=""
 ) -> pd.DataFrame:
     """Assembles a transaction table from a date and an amount series, dropping
     the rows that move no money (0.0 or missing) so only real bookings remain.
 
-    `tag` and `category` are either a constant or a series aligned with `dates`.
+    `tag`, `category` and `description` are either a constant or a series
+    aligned with `dates`.
     """
     transactions = pd.DataFrame(
         {
@@ -41,6 +44,11 @@ def _build_transactions(
                 else category.reset_index(drop=True)
             ),
             "amount": pd.to_numeric(amounts).reset_index(drop=True),
+            "description": (
+                description
+                if isinstance(description, str)
+                else description.reset_index(drop=True)
+            ),
         }
     )
     return transactions[transactions["amount"].fillna(0.0) != 0.0].reset_index(
@@ -54,7 +62,7 @@ def map_tags_to_categories(df: pd.DataFrame, tag_category_map: dict) -> pd.DataF
 
     Parameters
     ----------
-    df: Cashflow transactions with columns [date, tag, amount]
+    df: Cashflow transactions with columns [date, tag, amount, description]
     tag_category_map: Mapping of custom categories to a list of toshl tags. Needs to be
         category map for either income or expenses, matching the side `df` holds.
 

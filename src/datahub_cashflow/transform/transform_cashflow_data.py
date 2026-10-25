@@ -43,6 +43,7 @@ def cleaning_cashflow(df: pd.DataFrame) -> pd.DataFrame:
     2. Drop 1000s separators (,) and convert datatypes
     3. Create a unique column containing the amount spent or received
     4. Map all rows containing Urlaub to a vacation tag
+    5. Keep the free-text description (empty string if none was entered)
     Parameters
     ----------
     df: containing all cashflow data
@@ -70,11 +71,13 @@ def cleaning_cashflow(df: pd.DataFrame) -> pd.DataFrame:
         "expense_amount",
         "income_amount",
         "amount_main_currency",
+        "description",
     ]
     output_columns = [
         "date",
         "tag",
         "amount",
+        "description",
     ]
 
     expected_input_columns = set(column_name_mapping.keys())
@@ -98,6 +101,9 @@ def cleaning_cashflow(df: pd.DataFrame) -> pd.DataFrame:
         df_cleaned["amount_main_currency"]
         .replace(",", "", regex=True)
         .astype("float64")
+    )
+    df_cleaned["description"] = (
+        df_cleaned["description"].fillna("").astype(str).str.strip()
     )
 
     # Create unique amount column depending whether expense_amount is positive (expense) or zero (income)
@@ -150,18 +156,18 @@ def split_cashflow_data(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
 
     Parameters
     ----------
-    df  Cleaned cashflow data with columns ["tag", "date", "amount"]
+    df  Cleaned cashflow data with columns ["tag", "date", "amount", "description"]
 
     Returns
     -------
     Tuple of dataframes holding the income and the expense transactions
     """
-    needed_columns = ["tag", "date", "amount"]
+    needed_columns = ["tag", "date", "amount", "description"]
     assert set(needed_columns).intersection(set(df.columns)) == set(
         needed_columns
     ), "Columns missing! Need: {0}, Have: {1}".format(needed_columns, list(df.columns))
 
-    transactions = df[["date", "tag", "amount"]]
+    transactions = df[["date", "tag", "amount", "description"]]
 
     incomes = transactions[transactions["amount"] > 0.0].reset_index(drop=True)
     expenses = transactions[transactions["amount"] <= 0.0].reset_index(drop=True)

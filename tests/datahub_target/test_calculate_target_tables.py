@@ -22,6 +22,7 @@ def test_map_tags_to_categories_maps_every_tag():
             "date": pd.to_datetime(["2020-02-03", "2020-02-14", "2020-03-02"]),
             "tag": ["groceries", "Lebensmittel", "rent"],
             "amount": [-12.0, -8.0, -900.0],
+            "description": ["", "Rewe", "Warmmiete"],
         }
     )
     tag_category_map = {
@@ -31,8 +32,9 @@ def test_map_tags_to_categories_maps_every_tag():
     result = map_tags_to_categories(transactions, tag_category_map)
     assert list(result.columns) == TRANSACTION_COLUMNS
     assert result["category"].tolist() == ["Lebensmittel", "Lebensmittel", "Home"]
-    # the original tag is kept alongside the category
+    # the original tag and free-text description are kept alongside the category
     assert result["tag"].tolist() == ["groceries", "Lebensmittel", "rent"]
+    assert result["description"].tolist() == ["", "Rewe", "Warmmiete"]
 
 
 @pytest.mark.ut
@@ -55,6 +57,7 @@ def test_map_tags_to_categories_keeps_category_named_like_its_tag():
             "date": pd.to_datetime(["2020-02-03"]),
             "tag": ["Kaution"],
             "amount": [-1500.0],
+            "description": [""],
         }
     )
     result = map_tags_to_categories(transactions, {"Kaution": ["Kaution"]})
@@ -86,6 +89,8 @@ def test_build_investment_transactions_signs_buys_and_sells(investment_trades):
     assert (investments["category"] == "Investment").all()
     # the trade date is kept, not the month-end
     assert investments["date"].tolist() == list(investment_trades["date"])
+    # only toshl bookings carry a free-text description
+    assert (result["description"] == "").all()
 
 
 @pytest.mark.ut
