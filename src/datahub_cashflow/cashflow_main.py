@@ -25,9 +25,9 @@ logger = logging.getLogger(__name__)
 def run_cashflow() -> tuple[pd.DataFrame, pd.DataFrame]:
     """Runs the cashflow transform stage.
 
-    Returns the transaction-level ([date, tag, amount]) income and expense
-    tables so the target stage (`datahub_target.run_target`) can build the
-    dashboard-ready tables from them.
+    Returns the transaction-level ([date, tag, amount, description]) income and
+    expense tables so the target stage (`datahub_target.run_target`) can build
+    the dashboard-ready tables from them.
     """
     # Update complete cashflow data from Toshl
     combined_cashflow = update_toshl_cashflow(
