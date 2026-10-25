@@ -9,6 +9,7 @@ from src.datahub_target.transform.calculate_target_tables import (
     build_dividend_transactions,
     build_interest_transactions,
     build_riester_transactions,
+    build_crypto_transactions,
     load_investment_cost_transactions,
     aggregate_transactions_monthly,
     transform_cashflow_to_wide_format,
@@ -243,3 +244,24 @@ def test_transform_cashflow_to_wide_format_drops_all_zero_categories():
     result = transform_cashflow_to_wide_format(monthly)
     # the category nets to zero over the whole period and is therefore dropped
     assert "Kaution" not in result.columns
+
+
+@pytest.mark.ut
+def test_build_crypto_transactions_books_deposits_as_expenses():
+    transfers = pd.DataFrame(
+        {
+            "date": pd.to_datetime(["2020-01-01 10:00:00", "2020-02-01 18:30:00"]),
+            "exchange": ["kraken", "kraken"],
+            "amount": [100.0, -40.0],
+        }
+    )
+    result = build_crypto_transactions(transfers)
+    assert list(result.columns) == TRANSACTION_COLUMNS
+    # deposits to the exchange leave the bank account, withdrawals come back
+    assert result["amount"].tolist() == [-100.0, 40.0]
+    assert (result["category"] == "Crypto").all()
+    assert result["description"].tolist() == [
+        "Deposit to kraken",
+        "Withdrawal from kraken",
+    ]
+    assert result["date"].tolist() == list(pd.to_datetime(["2020-01-01", "2020-02-01"]))

@@ -105,3 +105,26 @@ def save_data(data: pd.DataFrame, filepath: Path, used_library: str = "pandas") 
         warn(
             f"Provided library is not supported yet! Use one of the following: {''.join(implemented_libraries)}"
         )
+
+
+def load_manual_transactions(
+    filepath: Path, action: str, known_actions: set[str]
+) -> pd.DataFrame:
+    """
+    Loads the rows of one `action` from the single manual transactions file,
+    which holds every manual correction of the source data.
+    Parameters
+    ----------
+    filepath: Path of the manual transactions file
+    action: action whose rows are returned
+    known_actions: all valid actions; any other action in the file fails, so a
+        typo never silently drops a correction
+
+    Returns
+    -------
+    The rows of `action` with their original index
+    """
+    manual = load_data(filepath, file_type="csv")
+    unknown_actions = sorted(set(manual["action"].dropna()).difference(known_actions))
+    assert not unknown_actions, f"Unknown manual transaction actions: {unknown_actions}"
+    return manual[manual["action"] == action]
