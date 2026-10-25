@@ -36,6 +36,64 @@ def update_toshl_cashflow(
     return df_cashflow
 
 
+def split_off_replaced_bookings(
+    df: pd.DataFrame, categories: list[str], excluded_bookings: pd.DataFrame
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """
+    Sets aside the toshl bookings that another datahub source books instead
+    (e.g. crypto deposits/withdrawals come from the exchange exports), since
+    keeping both would count them twice. These are
+    1. all bookings of the given toshl categories, and
+    2. single bookings listed in `excluded_bookings`, e.g. a fee that is already
+       contained in the crypto exchange data.
+    Parameters
+    ----------
+    df: raw toshl cashflow data
+    categories: toshl categories to set aside
+    excluded_bookings: single bookings to set aside, with columns
+        [date, tag, amount, description, comment]; `date` as YYYY-MM-DD,
+        `amount` as the positive amount in main currency, as shown in toshl, and
+        `comment` the reason for setting it aside
+
+    Returns
+    -------
+    Tuple of the remaining toshl bookings and the bookings set aside, the latter
+    with an additional `reason` column
+    """
+    reason = pd.Series(pd.NA, index=df.index, dtype="object")
+    reason[
+        df["Category"].isin(categories)
+    ] = "toshl category booked from another datahub source"
+
+    # Toshl dates are US formatted, amounts carry 1000s separators
+    dates = pd.to_datetime(df["Date"], format="%m/%d/%y")
+    amounts = df["In main currency"].replace(",", "", regex=True).astype("float64")
+    descriptions = df["Description"].fillna("").astype(str).str.strip()
+    for booking in excluded_bookings.itertuples():
+        matches = (
+            (dates == pd.Timestamp(booking.date))
+            & (df["Tags"] == booking.tag)
+            & ((amounts - float(booking.amount)).abs() < 0.005)
+            & (descriptions == str(booking.description).strip())
+        )
+        if matches.sum() != 1:
+            logger.warning(
+                f"Excluded toshl booking {booking.date} {booking.tag} "
+                f"{booking.amount} '{booking.description}' matches "
+                f"{matches.sum()} bookings instead of one!"
+            )
+        reason[matches] = booking.comment
+
+    is_replaced = reason.notna()
+    replaced = df[is_replaced].assign(reason=reason[is_replaced])
+    if not replaced.empty:
+        logger.info(
+            f"{len(replaced)} toshl bookings are replaced by another source:\n"
+            f"{replaced.to_string(index=False)}"
+        )
+    return df[~is_replaced].reset_index(drop=True), replaced.reset_index(drop=True)
+
+
 def cleaning_cashflow(df: pd.DataFrame) -> pd.DataFrame:
     """
     Data cleaning and preprocessing of cashflow data:

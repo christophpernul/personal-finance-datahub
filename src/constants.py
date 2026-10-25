@@ -23,6 +23,28 @@ TARGET_DIR = DATAHUB_ROOT / "target"
 STOCKS_INPUT_DIR = SOURCE_DIR / "stocks"
 TOSHL_SOURCE_DIR = SOURCE_DIR / "cashflow" / "toshl"
 
+# --- Manual transactions (all domains) ---
+# The single manually maintained file with every correction of the source data,
+# so no concrete booking ever lives in the code. Columns (German locale):
+# action;date;exchange;type;coin;amount;fee;group;refid;tag;description;comment
+# `action` decides which columns are used, see MANUAL_ACTIONS.
+PATH_MANUAL_TRANSACTIONS = SOURCE_DIR / "source_manual__transactions.csv"
+MANUAL_ACTION_CRYPTO_TRANSACTION = "crypto_transaction"
+MANUAL_ACTION_CRYPTO_CONVERSION = "crypto_conversion"
+MANUAL_ACTION_TOSHL_EXCLUSION = "toshl_exclusion"
+MANUAL_ACTIONS = {
+    # A coin movement missing in the exports; uses date, exchange, type, coin,
+    # amount, fee, group (legs of one manual trade share a group)
+    MANUAL_ACTION_CRYPTO_TRANSACTION,
+    # An exported booking that is one side of a conversion done by the exchange
+    # (e.g. on delisting); uses exchange, refid (of the exported booking) and
+    # group (both sides of one conversion share a group)
+    MANUAL_ACTION_CRYPTO_CONVERSION,
+    # A toshl booking that another source already books; uses date, tag,
+    # amount (positive, as shown in toshl) and description
+    MANUAL_ACTION_TOSHL_EXCLUSION,
+}
+
 # --- Stocks / ETF: source stage ---
 PATH_STOCKS_TRADES = STOCKS_INPUT_DIR / "source_stocks_portfolio_trades.ods"
 # Individual (single) stock trades, e.g. Coca Cola, Nvidia. Same sheet layout as
@@ -70,8 +92,42 @@ PATH_STOCKS_PORTFOLIO_VALUE = TRANSFORM_DIR / "transform_stocks__portfolio_value
 # Combined ETF + individual-stock portfolio value with a `security_type` column
 PATH_PORTFOLIO_VALUE_COMBINED = TRANSFORM_DIR / "transform_portfolio__value.csv"
 
+# --- Crypto: source stage ---
+# Raw exchange exports, picked up by file pattern so newer exports only need to
+# be dropped into the folder (rows of overlapping exports are deduplicated).
+CRYPTO_INPUT_DIR = SOURCE_DIR / "crypto"
+# Kraken switched from `kraken_ledgers_*` to `kraken-ledgers-*` file names
+CRYPTO_KRAKEN_LEDGERS_FILEPATTERN = "kraken[-_]ledgers[-_]*.csv"
+CRYPTO_BINANCE_TRADES_FILEPATTERN = "binance_tradehistory_*.csv"
+CRYPTO_BINANCE_DEPOSITS_FILEPATTERN = "binance_deposits_*.xlsx"
+CRYPTO_KUCOIN_TRADES_FILEPATTERN = "kucoin_trades_*.csv"
+CRYPTO_KUCOIN_DEPOSITS_FILEPATTERN = "kucoin_deposits_*.csv"
+# Manually maintained coin master data: coin;name;symbol;currency, where symbol
+# is the yahoo ticker (e.g. BTC-EUR) and currency the quote currency of it.
+PATH_CRYPTO_MASTER_DATA = CRYPTO_INPUT_DIR / "source_crypto__master_data.csv"
+
+# --- Crypto: transform stage ---
+# Every balance change of every coin per exchange/wallet, see
+# `datahub_crypto.transform.preprocessing.LEDGER_COLUMNS`
+PATH_CRYPTO_LEDGER = TRANSFORM_DIR / "transform_crypto__ledger.csv"
+# One row per trade with the moved cost basis and fees in EUR
+PATH_CRYPTO_TRADES = TRANSFORM_DIR / "transform_crypto__trades.csv"
+PATH_CRYPTO_HOLDINGS_MONTHLY = TRANSFORM_DIR / "transform_crypto__holdings_monthly.csv"
+# Current value of every held coin per exchange/wallet (portfolio page)
+PATH_CRYPTO_PORTFOLIO_VALUE = TRANSFORM_DIR / "transform_crypto__portfolio_value.csv"
+# One row per coin ever held, incl. sold coins and their realized gain
+PATH_CRYPTO_COINS = TRANSFORM_DIR / "transform_crypto__coins.csv"
+
 # --- Cashflow: transform stage ---
 PATH_CASHFLOW_COMBINED = TRANSFORM_DIR / "transform_cashflow__toshl_cashflow.csv"
+# Toshl categories whose bookings are taken from another datahub source instead
+# (crypto deposits/withdrawals come from the exchange exports)
+TOSHL_CATEGORIES_FROM_OTHER_SOURCES = ["Crypto"]
+# The toshl bookings set aside because of the above, kept for reconciliation
+# together with the reason why each was set aside
+PATH_CASHFLOW_TOSHL_REPLACED = (
+    TRANSFORM_DIR / "transform_cashflow__toshl_replaced_bookings.csv"
+)
 # Single toshl transactions, split by the sign of their own amount
 PATH_CASHFLOW_INCOMES = TRANSFORM_DIR / "transform_cashflow__incomes.csv"
 PATH_CASHFLOW_EXPENSES = TRANSFORM_DIR / "transform_cashflow__expenses.csv"

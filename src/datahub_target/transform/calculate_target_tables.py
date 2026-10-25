@@ -156,6 +156,26 @@ def build_riester_transactions(riester: pd.DataFrame) -> pd.DataFrame:
     )
 
 
+def build_crypto_transactions(crypto_transfers: pd.DataFrame) -> pd.DataFrame:
+    """Turns the EUR moved between the bank and the crypto exchanges into
+    `Crypto` transactions: a deposit to an exchange (positive in the exchange
+    ledger) is money spent on crypto and becomes an outflow, a withdrawal back
+    to the bank an inflow. The exchange is kept as description, and the
+    exchange timestamps are cut to the day like all other bookings."""
+    is_deposit = crypto_transfers["amount"] > 0
+    description = (
+        is_deposit.map({True: "Deposit to ", False: "Withdrawal from "})
+        + crypto_transfers["exchange"]
+    )
+    return _build_transactions(
+        pd.to_datetime(crypto_transfers["date"]).dt.normalize(),
+        "Crypto",
+        "Crypto",
+        -crypto_transfers["amount"],
+        description,
+    )
+
+
 def load_investment_cost_transactions(filepath: Path) -> pd.DataFrame:
     """Loads the combined investment-cost report (comdirect cost reports +
     Trade Republic fees) as individual ``Investment Costs`` transactions.

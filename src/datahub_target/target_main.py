@@ -24,6 +24,7 @@ from datahub_target.transform.calculate_target_tables import (
     build_dividend_transactions,
     build_interest_transactions,
     build_riester_transactions,
+    build_crypto_transactions,
     load_investment_cost_transactions,
     aggregate_transactions_monthly,
     transform_cashflow_to_wide_format,
@@ -40,6 +41,7 @@ def run_target(
     monthly_rebalancing: pd.DataFrame,
     interest: pd.DataFrame,
     riester: pd.DataFrame,
+    crypto_transfers: pd.DataFrame,
 ) -> None:
     """Calculates and stores all dashboard-ready target tables.
 
@@ -54,6 +56,8 @@ def run_target(
         returned by `datahub_stocks.run_stocks`.
     monthly_rebalancing: the monthly *net* rebalancing cashflow, which has no
         transaction-level equivalent (see `build_rebalancing_transactions`).
+    crypto_transfers: EUR deposits to / withdrawals from the crypto exchanges
+        ([date, exchange, amount]), as returned by `datahub_crypto.run_crypto`.
     """
     calculate_cashflow_target_tables(
         cashflow_incomes,
@@ -63,6 +67,7 @@ def run_target(
         monthly_rebalancing,
         interest,
         riester,
+        crypto_transfers,
     )
 
 
@@ -74,6 +79,7 @@ def calculate_cashflow_target_tables(
     monthly_rebalancing: pd.DataFrame,
     interest: pd.DataFrame,
     riester: pd.DataFrame,
+    crypto_transfers: pd.DataFrame,
 ) -> None:
     """Builds the transaction-level cashflow tables from all sources, stores
     them, and stores the monthly wide-format aggregation of the very same
@@ -99,7 +105,9 @@ def calculate_cashflow_target_tables(
     # so the dashboard finds every booking in a single table. Received ETF
     # distributions, stock dividends and cash-deposit interest (Tagesgeld /
     # Festgeld) are incomes, Riester contributions and investment costs are
-    # expenses, and the trades are either, depending on buy or sell.
+    # expenses, and the trades are either, depending on buy or sell. The same
+    # holds for crypto: EUR deposited to an exchange is an expense, EUR
+    # withdrawn to the bank an income.
     additional_transactions = pd.concat(
         [
             build_investment_transactions(investment_trades),
@@ -107,6 +115,7 @@ def calculate_cashflow_target_tables(
             build_dividend_transactions(dividends),
             build_interest_transactions(interest),
             build_riester_transactions(riester),
+            build_crypto_transactions(crypto_transfers),
             load_investment_cost_transactions(PATH_INVESTMENT_COSTS),
         ],
         ignore_index=True,

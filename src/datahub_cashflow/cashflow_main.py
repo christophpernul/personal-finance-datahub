@@ -2,7 +2,7 @@ import logging
 
 import pandas as pd
 
-from utils.file_io import save_data
+from utils.file_io import save_data, load_manual_transactions
 from constants import (
     TOSHL_SOURCE_FILEPATTERN,
     TOSHL_SOURCE_DIR,
@@ -11,9 +11,15 @@ from constants import (
     PATH_CASHFLOW_EXPENSES,
     PATH_CASHFLOW_INCOMES_MONTHLY,
     PATH_CASHFLOW_EXPENSES_MONTHLY,
+    TOSHL_CATEGORIES_FROM_OTHER_SOURCES,
+    PATH_CASHFLOW_TOSHL_REPLACED,
+    PATH_MANUAL_TRANSACTIONS,
+    MANUAL_ACTIONS,
+    MANUAL_ACTION_TOSHL_EXCLUSION,
 )
 from datahub_cashflow.transform.transform_cashflow_data import (
     update_toshl_cashflow,
+    split_off_replaced_bookings,
     split_cashflow_data,
     aggregate_cashflow_monthly,
     cleaning_cashflow,
@@ -40,8 +46,20 @@ def run_cashflow() -> tuple[pd.DataFrame, pd.DataFrame]:
     )
     logger.info(f"Complete cashflow written to {PATH_CASHFLOW_COMBINED}")
 
+    # Crypto bookings come from the exchange exports instead (datahub_crypto),
+    # as do single bookings listed as excluded (e.g. crypto sale fees); the
+    # toshl ones are kept aside with their reason to reconcile both sources.
+    toshl_cashflow, replaced_bookings = split_off_replaced_bookings(
+        combined_cashflow,
+        TOSHL_CATEGORIES_FROM_OTHER_SOURCES,
+        load_manual_transactions(
+            PATH_MANUAL_TRANSACTIONS, MANUAL_ACTION_TOSHL_EXCLUSION, MANUAL_ACTIONS
+        ),
+    )
+    save_data(data=replaced_bookings, filepath=PATH_CASHFLOW_TOSHL_REPLACED)
+
     # Clean cashflow data
-    cleaned_cashflow = cleaning_cashflow(combined_cashflow)
+    cleaned_cashflow = cleaning_cashflow(toshl_cashflow)
     logger.info(f"Cashflow data cleaned!")
 
     # Split into single income and expense transactions

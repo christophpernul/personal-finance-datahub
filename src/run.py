@@ -1,6 +1,7 @@
 import logging
 
 from datahub_cashflow.cashflow_main import run_cashflow
+from datahub_crypto.crypto_main import run_crypto
 from datahub_stocks.stocks_main import run_stocks
 from datahub_target.target_main import run_target
 
@@ -28,6 +29,7 @@ cashflow_incomes, cashflow_expenses = run_cashflow()
     interest,
     riester,
 ) = run_stocks()
+crypto_transfers = run_crypto()
 run_target(
     cashflow_incomes,
     cashflow_expenses,
@@ -36,5 +38,6 @@ run_target(
     monthly_rebalancing,
     interest,
     riester,
+    crypto_transfers,
 )
 disable_existing_loggers = False
