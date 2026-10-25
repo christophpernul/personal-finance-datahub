@@ -75,6 +75,7 @@ STOCK_TRADES_REQUIRED_COLUMNS = {
     "Kurs",
     "Betrag",
     "Kosten",
+    "Anbieter",
     "Name",
 }
 SPLITS_REQUIRED_COLUMNS = {
@@ -89,6 +90,7 @@ REBALANCING_REQUIRED_COLUMNS = {
     "price",
     "amount",
     "cost",
+    "depot",
     "shares",
     "name",
     "isin",
@@ -180,7 +182,7 @@ def preprocess_rebalancing(data: pd.DataFrame) -> pd.DataFrame:
 
     float_cols = ["price", "amount", "cost", "shares"]
     data[float_cols] = data[float_cols].apply(pd.to_numeric, errors="coerce")
-    data = strip_vals(data, ["name", "isin", "type"])
+    data = strip_vals(data, ["name", "isin", "type", "depot"])
 
     is_buy = data["amount"] < 0
     data["trade_type"] = is_buy.map({True: "buy", False: "sell"})
@@ -204,6 +206,7 @@ def preprocess_rebalancing(data: pd.DataFrame) -> pd.DataFrame:
             "cost",
             "shares",
             "trade_type",
+            "depot",
         ]
     ]
 
@@ -251,6 +254,7 @@ def preprocess_stock_trades(data: pd.DataFrame, is_buy: bool) -> pd.DataFrame:
             "Kurs": "price",
             "Betrag": "amount",
             "Kosten": "cost",
+            "Anbieter": "depot",
             "Name": "name",
         }
     )
@@ -260,7 +264,7 @@ def preprocess_stock_trades(data: pd.DataFrame, is_buy: bool) -> pd.DataFrame:
 
     float_cols = ["price", "amount", "cost"]
     data[float_cols] = data[float_cols].apply(pd.to_numeric, errors="coerce")
-    data = strip_vals(data, ["name", "type"])
+    data = strip_vals(data, ["name", "type", "depot"])
 
     # Stocks carry no ISIN; use the name as the security identifier.
     data["isin"] = data["name"]
@@ -285,6 +289,7 @@ def preprocess_stock_trades(data: pd.DataFrame, is_buy: bool) -> pd.DataFrame:
             "cost",
             "shares",
             "trade_type",
+            "depot",
         ]
     ]
 
@@ -662,6 +667,23 @@ def combine_portfolio_values(
     return pd.concat([etf, stock], ignore_index=True)
 
 
+def current_depots(portfolio: pd.DataFrame) -> pd.DataFrame:
+    """Depot (broker) holding each position, from the trades' `depot` column.
+
+    Shares bought and sold are netted per ISIN and depot. A depot counts if it
+    holds more than 1 % of the position, so rounding leftovers of a fully sold
+    depot don't show up; a position held in several depots lists all of them,
+    largest first and comma-separated. Returns [isin, depot]."""
+    shares = portfolio.groupby(["isin", "depot"])["shares"].sum().reset_index()
+    shares["share"] = shares["shares"] / shares.groupby("isin")["shares"].transform(
+        "sum"
+    )
+    held = shares[shares["share"] > 0.01].sort_values(
+        ["isin", "shares"], ascending=[True, False]
+    )
+    return held.groupby("isin", as_index=False)["depot"].agg(", ".join)
+
+
 def calculate_portfolio_value(
     shares: pd.DataFrame,
     prices: pd.DataFrame,
@@ -693,6 +715,7 @@ def calculate_portfolio_value(
     )
     result = result.merge(prices[["isin", "price"]], on="isin", how="left")
     result = result.merge(total_costs, on="isin", how="left")
+    result = result.merge(current_depots(portfolio), on="isin", how="left")
     result["value"] = result["cumulative_shares"] * result["price"]
     result["value_gained"] = (
         result["value"] - result["total_investment"] - result["total_cost"]
@@ -727,5 +750,6 @@ def calculate_portfolio_value(
             "symbol",
             "type",
             "currency",
+            "depot",
         ]
     ]

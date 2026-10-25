@@ -17,6 +17,7 @@ from src.datahub_stocks.transform.preprocessing import (
     combine_portfolio_values,
     apply_splits,
     build_portfolio_cashflows,
+    current_depots,
 )
 
 
@@ -339,6 +340,7 @@ def stock_trades_raw():
             "Kurs": [40.65, 3.25],
             "Betrag": [203.25, 227.50],
             "Kosten": [1.0, 6.4],
+            "Anbieter": ["traderepublic", "comdirect"],
             "Name": ["Coca Cola", "S&P500 Put"],
             "ISIN": [float("nan"), float("nan")],
         }
@@ -409,6 +411,7 @@ def test_preprocess_stock_trades_rounds_shares_to_integers():
             "Kurs": [77.50],
             "Betrag": [156.0],
             "Kosten": [1.0],
+            "Anbieter": ["traderepublic"],
             "Name": ["BioNTech"],
             "ISIN": [float("nan")],
         }
@@ -488,6 +491,7 @@ def test_preprocess_rebalancing_buy_and_sell_signs(rebalancing_raw):
         "cost",
         "shares",
         "trade_type",
+        "depot",
     ]
     buy = result[result["isin"] == "A"].iloc[0]
     assert buy["trade_type"] == "buy"
@@ -544,6 +548,7 @@ def test_aggregate_monthly_rebalancing_expense_when_buys_dominate():
                 "shares": [float("nan"), 25.11],
                 "name": ["ETF A", "ETF B"],
                 "isin": ["A", "B"],
+                "depot": ["traderepublic"] * 2,
             }
         )
     )
@@ -609,3 +614,26 @@ def test_build_portfolio_cashflows_signs_dividends_and_value():
     assert flows["NVIDIA", "value"] == pytest.approx(500.0)
     assert "Mercedes Benz" not in result["isin"].values  # no trades
     assert (result.loc[result["type"] == "value", "date"] == "2026-10-25").all()
+
+
+@pytest.mark.ut
+def test_current_depots_nets_trades_and_lists_split_positions():
+    trades = pd.DataFrame(
+        {
+            "isin": ["A", "A", "B", "B", "B", "C"],
+            "depot": [
+                "comdirect",
+                "comdirect",  # fully sold up to a rounding leftover
+                "traderepublic",
+                "comdirect",
+                "flatex",
+                "traderepublic",
+            ],
+            "shares": [10.0, -9.9999, 1.0, 3.0, 2.0, 5.0],
+        }
+    )
+    trades.loc[len(trades)] = {"isin": "A", "depot": "traderepublic", "shares": 4.0}
+    result = current_depots(trades).set_index("isin")["depot"]
+    assert result["A"] == "traderepublic"
+    assert result["B"] == "comdirect, flatex, traderepublic"
+    assert result["C"] == "traderepublic"
