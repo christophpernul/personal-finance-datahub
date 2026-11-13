@@ -43,6 +43,8 @@ produces the dashboard-ready tables: **incomes**, **expenses**, **portfolio valu
 | Crypto exchange exports | `source/crypto/`: `kraken_ledgers_*.csv`, `binance_tradehistory_*.csv`, `binance_deposits_*.xlsx`, `kucoin_trades_*.csv`, `kucoin_deposits_*.csv` | crypto portfolio, `Crypto` income/expenses |
 | Crypto master data | `source_crypto__master_data.csv` (coin → yahoo symbol) | crypto portfolio valuation |
 | Manual transactions | `source_manual__transactions.csv` (every manual correction of the source data, see below) | crypto portfolio, incomes & expenses |
+| Riester fees | `source/stocks/raisin_riester_gebuehren.csv` (Raisin fee export) | Riester position (costs) |
+| Riester value | `source/stocks/source_stocks_riester_value.ods` (sheet `Wert`: Datum, Wert, Kommentar), maintained by hand | Riester position (current value) |
 | Cash balance sheet | `source/cash/source_cash_balance_sheet.ods` (sheets: Konten, Kontostaende, Festgeld) | account balances, fixed-term deposits, available vs. bound cash, liabilities |
 
 ### Incomes
@@ -65,6 +67,16 @@ produces the dashboard-ready tables: **incomes**, **expenses**, **portfolio valu
 
 Cumulative monthly share holdings × current prices, combined into one table with a
 `security_type` of `ETF` or `Aktie`.
+
+The **Riester contract** joins that table as one more position (`security_type` `Riester`,
+`isin` `RIESTER`, no shares or price): `value` is the latest row of the hand-maintained value
+sheet, `total_investment` all contributions of the `Riester Buy` sheet and `total_cost` all fees
+of the Raisin export (refunds included; its `Summe` row is checked against the bookings). The fees
+are paid out of the contract, so the value is already net of them and `value_gained` is
+`value − total_investment` (unlike ETFs, where the order costs are subtracted as well). Its
+contributions and the value at the date it was recorded are added to
+`transform_portfolio__cashflows.csv` for the money-weighted return. Without any recorded value the
+contract is left out with a warning.
 
 ### Sold positions
 

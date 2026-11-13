@@ -26,6 +26,12 @@ from datahub_stocks.transform.preprocessing import (
     combine_portfolio_values,
     build_portfolio_cashflows,
 )
+from datahub_stocks.transform.riester import (
+    preprocess_riester_fees,
+    preprocess_riester_values,
+    calculate_riester_value,
+    build_riester_cashflows,
+)
 from datahub_stocks.extract.extract_master_data import (
     extract_current_etf_prices,
     extract_historic_etf_prices,
@@ -53,6 +59,9 @@ from constants import (
     PATH_STOCKS_PORTFOLIO_VALUE,
     PATH_PORTFOLIO_VALUE_COMBINED,
     PATH_PORTFOLIO_CASHFLOWS,
+    PATH_RIESTER_FEES,
+    PATH_RIESTER_VALUE,
+    RIESTER_VALUE_SHEET,
 )
 
 
@@ -138,6 +147,14 @@ def run_stocks():
         load_data(PATH_STOCKS_TRADES, file_type="excel", sheet_name="Riester Buy")
     )
     logger.info("Riester Data (Riester Buy) loaded!")
+    # The Raisin export starts with a byte order mark
+    riester_fees = preprocess_riester_fees(
+        pd.read_csv(PATH_RIESTER_FEES, sep=";", decimal=",", encoding="utf-8-sig")
+    )
+    riester_values = preprocess_riester_values(
+        load_data(PATH_RIESTER_VALUE, file_type="excel", sheet_name=RIESTER_VALUE_SHEET)
+    )
+    logger.info("Riester fees and contract values loaded!")
 
     etf_mergers = load_data(
         PATH_STOCK_MERGERS,
@@ -265,7 +282,13 @@ def run_stocks():
     combined_portfolio_value = combine_portfolio_values(
         portfolio_value, stock_portfolio_value
     )
-    save_data(combined_portfolio_value, PATH_PORTFOLIO_VALUE_COMBINED)
+    # The Riester contract joins as one more position (security_type Riester),
+    # valued by hand instead of by a price
+    riester_value = calculate_riester_value(riester, riester_fees, riester_values)
+    save_data(
+        pd.concat([combined_portfolio_value, riester_value], ignore_index=True),
+        PATH_PORTFOLIO_VALUE_COMBINED,
+    )
     logger.info(
         f"Combined ETF + stock portfolio value saved in {PATH_PORTFOLIO_VALUE_COMBINED}"
     )
@@ -285,6 +308,15 @@ def run_stocks():
         portfolio_value=combined_portfolio_value,
         mergers=etf_mergers,
         valuation_date=pd.Timestamp.today().normalize(),
+    )
+    # Riester: contributions and the value at the date it was recorded
+    portfolio_cashflows = (
+        pd.concat(
+            [portfolio_cashflows, build_riester_cashflows(riester, riester_value)],
+            ignore_index=True,
+        )
+        .sort_values(["date", "isin"])
+        .reset_index(drop=True)
     )
     save_data(portfolio_cashflows, PATH_PORTFOLIO_CASHFLOWS)
     logger.info(f"Portfolio cashflows saved in {PATH_PORTFOLIO_CASHFLOWS}")
