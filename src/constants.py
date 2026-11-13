@@ -50,6 +50,14 @@ PATH_STOCKS_TRADES = STOCKS_INPUT_DIR / "source_stocks_portfolio_trades.ods"
 # Individual (single) stock trades, e.g. Coca Cola, Nvidia. Same sheet layout as
 # the ETF portfolio file but the securities carry no ISIN.
 PATH_SINGLE_STOCKS_TRADES = STOCKS_INPUT_DIR / "source_stocks_trades.ods"
+# Riester pension contract (contributions: `Riester Buy` sheet of
+# PATH_STOCKS_TRADES). Fee export of Raisin: Datum;Buchungsart;Betrag in EUR;
+# Bemerkung (semicolon-separated, comma decimals, ends with a `Summe` row).
+PATH_RIESTER_FEES = STOCKS_INPUT_DIR / "raisin_riester_gebuehren.csv"
+# Manually maintained current value of the contract, sheet `Wert` with
+# Datum, Wert, Kommentar; the latest row is the current value.
+PATH_RIESTER_VALUE = STOCKS_INPUT_DIR / "source_stocks_riester_value.ods"
+RIESTER_VALUE_SHEET = "Wert"
 # Manually maintained master data for individual stocks (keyed by name, since
 # stocks carry no ISIN): yahoo ticker symbol and currency for price extraction.
 PATH_STOCKS_MASTER_DATA = STOCKS_INPUT_DIR / "source_stocks__master_data.csv"
