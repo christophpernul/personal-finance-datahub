@@ -1,12 +1,14 @@
-"""Cash balance sheet: where cash lies, at which interest rate, and how long
-fixed-term deposits keep it bound.
+"""Cash balance sheet: where cash lies, at which interest rate, how long
+fixed-term deposits keep it bound, and what is owed on credit cards and loans.
 
 The manually maintained source workbook has three sheets with German headers:
 
-- ``Konten``: one row per account (Giro, Tagesgeld, Verrechnung, Sparbuch) with
-  its *current* interest rate (no history; received interest is tracked in the
-  `Zinsen` sheet of the stocks trades file, not here).
+- ``Konten``: one row per account with its *current* interest rate (no
+  history; received interest is tracked in the `Zinsen` sheet of the stocks
+  trades file, not here). Cash accounts are Giro, Tagesgeld, Verrechnung and
+  Sparbuch; Kreditkarte and Kredit are liabilities.
 - ``Kontostaende``: account balances at arbitrary dates (usually month end).
+  Liabilities are entered as shown by the bank, i.e. as negative amounts.
 - ``Festgeld``: one row per fixed-term deposit contract.
 
 Nothing here calculates interest amounts; rates are passed through for display.
@@ -20,7 +22,8 @@ import pandas as pd
 
 logger = logging.getLogger(__name__)
 
-ACCOUNT_TYPES = {"Giro", "Tagesgeld", "Verrechnung", "Sparbuch"}
+LIABILITY_TYPES = {"Kreditkarte", "Kredit"}
+ACCOUNT_TYPES = {"Giro", "Tagesgeld", "Verrechnung", "Sparbuch"} | LIABILITY_TYPES
 
 # A balance older than this (relative to the month end, or today for the
 # current month) is flagged as stale
@@ -32,6 +35,7 @@ STATUS_UPCOMING = "zukünftig"
 
 BUCKET_AVAILABLE = "verfügbar"
 BUCKET_BOUND = "gebunden"
+BUCKET_LIABILITIES = "verbindlichkeiten"
 
 ACCOUNT_COLUMN_MAP = {
     "Konto-ID": "account_id",
@@ -83,6 +87,7 @@ MONTHLY_BALANCE_COLUMNS = [
     "platform",
     "name",
     "type",
+    "is_liability",
     "rate_pa",
     "rate_valid_until",
     "balance",
@@ -220,12 +225,21 @@ def preprocess_term_deposits(data: pd.DataFrame) -> pd.DataFrame:
 def validate_references(
     accounts: pd.DataFrame, balances: pd.DataFrame, deposits: pd.DataFrame
 ) -> None:
-    """Every balance and every payout account must refer to a known account."""
+    """Every balance and every payout account must refer to a known account,
+    and a liability can't have a positive balance (debt is negative)."""
     known = set(accounts["account_id"])
     unknown_balances = sorted(set(balances["account_id"]) - known)
     assert (
         not unknown_balances
     ), f"`Kontostaende` refer to unknown `Konto-ID`s: {unknown_balances}"
+    liabilities = accounts.loc[accounts["type"].isin(LIABILITY_TYPES), "account_id"]
+    positive = balances[
+        balances["account_id"].isin(liabilities) & (balances["balance"] > 0)
+    ]
+    assert positive.empty, (
+        "Liabilities (Kreditkarte/Kredit) need a negative `Saldo`: "
+        f"{positive[['date', 'account_id', 'balance']].values.tolist()}"
+    )
     unknown_payout = sorted(set(deposits["payout_account_id"].dropna()) - known)
     assert (
         not unknown_payout
@@ -281,6 +295,7 @@ def calculate_monthly_balances(
     closed_month = monthly["closed"] + pd.offsets.MonthEnd(0)
     monthly = monthly[monthly["closed"].isna() | (monthly["date"] <= closed_month)]
 
+    monthly["is_liability"] = monthly["type"].isin(LIABILITY_TYPES)
     reference = monthly["date"].clip(upper=today)
     monthly["is_stale"] = (
         reference - monthly["balance_date"]
@@ -316,14 +331,16 @@ def calculate_term_deposit_overview(
 def calculate_monthly_liquidity(
     monthly_balances: pd.DataFrame, deposits: pd.DataFrame, today: pd.Timestamp
 ) -> pd.DataFrame:
-    """Cash per month end split into `verfügbar` (account balances) and
-    `gebunden` (fixed-term deposits running at the month end).
+    """Cash per month end split into `verfügbar` (cash account balances) and
+    `gebunden` (fixed-term deposits running at the month end), plus the
+    `verbindlichkeiten` (credit card and loan balances, negative).
 
     Past months and the current month use the recorded balances. The months
     after the current one, up to the last maturity, are a projection
-    (`is_projection`): the current balances stay as they are and every deposit
-    maturing after today moves its principal from `gebunden` to `verfügbar`.
-    Months before the first recorded balance only have a `gebunden` value.
+    (`is_projection`): the current balances and liabilities stay as they are
+    and every deposit maturing after today moves its principal from
+    `gebunden` to `verfügbar`. Months before the first recorded balance only
+    have a `gebunden` value.
     """
     today = pd.Timestamp(today).normalize()
     current_month = today + pd.offsets.MonthEnd(0)
@@ -337,8 +354,13 @@ def calculate_monthly_liquidity(
         ends.append(deposits["end_date"].max())
     month_ends = _month_ends(min(starts), max(ends))
 
-    available = monthly_balances.groupby("date")["balance"].sum()
+    is_liability = monthly_balances["is_liability"].astype(bool)
+    available = monthly_balances[~is_liability].groupby("date")["balance"].sum()
     current_available = available.get(current_month)
+    liabilities = monthly_balances[is_liability].groupby("date")["balance"].sum()
+    # Months with balances but no liability account owe nothing
+    liabilities = liabilities.reindex(monthly_balances["date"].unique(), fill_value=0.0)
+    current_liabilities = liabilities.get(current_month)
 
     rows = []
     for month_end in month_ends:
@@ -356,9 +378,13 @@ def calculate_monthly_liquidity(
                 if current_available is None
                 else current_available + deposits.loc[paid_back, "principal"].sum()
             )
+            owed = current_liabilities
         else:
             value = available.get(month_end)
+            owed = liabilities.get(month_end)
         if value is not None:
             rows.append((month_end, BUCKET_AVAILABLE, float(value), is_projection))
         rows.append((month_end, BUCKET_BOUND, float(bound), is_projection))
+        if owed is not None:
+            rows.append((month_end, BUCKET_LIABILITIES, float(owed), is_projection))
     return pd.DataFrame(rows, columns=LIQUIDITY_COLUMNS)

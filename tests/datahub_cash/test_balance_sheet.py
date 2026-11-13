@@ -5,6 +5,7 @@ import pytest
 from src.datahub_cash.transform.balance_sheet import (
     BUCKET_AVAILABLE,
     BUCKET_BOUND,
+    BUCKET_LIABILITIES,
     LIQUIDITY_COLUMNS,
     MONTHLY_BALANCE_COLUMNS,
     STATUS_MATURED,
@@ -273,3 +274,66 @@ def test_monthly_liquidity(accounts, balances, deposits):
     assert liquidity["date"].max() == pd.Timestamp("2027-12-31")
     assert value("2027-12-31", BUCKET_AVAILABLE) == pytest.approx(14232.33)
     assert value("2027-12-31", BUCKET_BOUND) == 0
+    # no liability account: nothing owed in every month with balances
+    assert value("2026-11-30", BUCKET_LIABILITIES) == 0
+    assert (pd.Timestamp("2023-12-31"), BUCKET_LIABILITIES) not in values.index
+
+
+# --- Liabilities ---------------------------------------------------------------
+
+
+def _with_liabilities(card_balance: float, loan_balance: float):
+    accounts = _accounts_sheet()
+    liabilities = pd.DataFrame(
+        {
+            "Konto-ID": ["card", "loan"],
+            "Bank": ["DKB", "offen"],
+            "Name": ["Kreditkarte", "Kredit"],
+            "Typ": ["Kreditkarte", "Kredit"],
+        }
+    )
+    balances = pd.concat(
+        [
+            _balances_sheet(),
+            pd.DataFrame(
+                {
+                    "Datum": pd.to_datetime(["2026-11-13", "2026-11-13"]),
+                    "Konto-ID": ["card", "loan"],
+                    "Saldo": [card_balance, loan_balance],
+                }
+            ),
+        ],
+        ignore_index=True,
+    )
+    return (
+        preprocess_accounts(pd.concat([accounts, liabilities], ignore_index=True)),
+        preprocess_balances(balances),
+    )
+
+
+@pytest.mark.ut
+def test_liabilities_are_kept_apart_from_available_cash(deposits):
+    accounts, balances = _with_liabilities(-250.0, -1000.0)
+    validate_references(accounts, balances, deposits)
+
+    monthly = calculate_monthly_balances(accounts, balances, TODAY)
+    flags = monthly.drop_duplicates("account_id").set_index("account_id")
+    assert flags.loc["card", "is_liability"] and flags.loc["loan", "is_liability"]
+    assert not flags.loc["giro", "is_liability"]
+
+    liquidity = calculate_monthly_liquidity(monthly, deposits, TODAY)
+    values = liquidity.set_index(["date", "bucket"])["value"]
+    current = pd.Timestamp("2026-11-30")
+    assert values[(current, BUCKET_AVAILABLE)] == pytest.approx(8000)
+    assert values[(current, BUCKET_LIABILITIES)] == pytest.approx(-1250)
+    # the projection keeps the current debt
+    assert values[(pd.Timestamp("2027-06-30"), BUCKET_LIABILITIES)] == pytest.approx(
+        -1250
+    )
+
+
+@pytest.mark.ut
+def test_liabilities_reject_positive_balance(deposits):
+    accounts, balances = _with_liabilities(250.0, 0.0)
+    with pytest.raises(AssertionError, match="negative `Saldo`"):
+        validate_references(accounts, balances, deposits)
