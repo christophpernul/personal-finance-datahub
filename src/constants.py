@@ -129,6 +129,32 @@ PATH_CRYPTO_PORTFOLIO_VALUE = TRANSFORM_DIR / "transform_crypto__portfolio_value
 # One row per coin ever held, incl. sold coins and their realized gain
 PATH_CRYPTO_COINS = TRANSFORM_DIR / "transform_crypto__coins.csv"
 
+# --- Cash (accounts, fixed-term deposits, liabilities): source stage ---
+# Manually maintained workbook with German headers, sheets:
+# - Konten: Konto-ID, Bank, Plattform, Name, Typ (Giro/Tagesgeld/Verrechnung/
+#   Sparbuch, or the liabilities Kreditkarte/Kredit), Zinssatz (current rate,
+#   percentage cell), Zinssatz gültig bis, Eröffnet, Geschlossen, Kommentar
+# - Kontostaende: Datum, Konto-ID, Saldo (liabilities negative), Kommentar
+# - Festgeld: Vertrags-ID, Bank, Plattform, Name, Betrag, Zinssatz, Beginn,
+#   Ende, Auszahlungskonto (Konto-ID), Kommentar
+# Received interest is not tracked here but in the `Zinsen` sheet of
+# PATH_STOCKS_TRADES.
+CASH_INPUT_DIR = SOURCE_DIR / "cash"
+PATH_CASH_BALANCE_SHEET = CASH_INPUT_DIR / "source_cash_balance_sheet.ods"
+CASH_SHEET_ACCOUNTS = "Konten"
+CASH_SHEET_BALANCES = "Kontostaende"
+CASH_SHEET_TERM_DEPOSITS = "Festgeld"
+
+# --- Cash: transform stage ---
+# Balance of every account per month end (latest balance carried forward,
+# flagged `is_stale` when outdated) with the account's current interest rate
+PATH_CASH_BALANCES_MONTHLY = TRANSFORM_DIR / "transform_cash__balances_monthly.csv"
+# One row per fixed-term deposit: status, term, remaining days and progress
+PATH_CASH_TERM_DEPOSITS = TRANSFORM_DIR / "transform_cash__term_deposits.csv"
+# All cash per month end split into available (accounts) and bound (fixed-term
+# deposits) plus the liabilities, projected until the last deposit matures
+PATH_CASH_LIQUIDITY_MONTHLY = TRANSFORM_DIR / "transform_cash__liquidity_monthly.csv"
+
 # --- Cashflow: transform stage ---
 PATH_CASHFLOW_COMBINED = TRANSFORM_DIR / "transform_cashflow__toshl_cashflow.csv"
 # Toshl categories whose bookings are taken from another datahub source instead
