@@ -575,6 +575,25 @@ def aggregate_monthly_rebalancing(rebalancing: pd.DataFrame) -> pd.DataFrame:
     return monthly[["date", "expense_rebalancing", "income_rebalancing"]]
 
 
+def dividend_security_keys(
+    dividends: pd.DataFrame, trade_keys, mergers: pd.DataFrame
+) -> pd.Series:
+    """Security key (the trades' `isin` column) each dividend belongs to.
+
+    Stock dividends carry no ISIN and stocks are keyed by name, whose spelling
+    can differ in case between the sheets (e.g. Nvidia / NVIDIA), so the name is
+    matched case-insensitively. Dividends of a merged ETF move onto its
+    successor ISIN. Keys matching no trade are returned unchanged."""
+    key_by_lower = {key.lower(): key for key in trade_keys}
+    successor = dict(zip(mergers["isin_old"], mergers["isin_new"]))
+    return (
+        dividends["isin"]
+        .where(dividends["isin"] != "", dividends["name"])
+        .replace(successor)
+        .map(lambda key: key_by_lower.get(key.lower(), key))
+    )
+
+
 def build_portfolio_cashflows(
     trades: pd.DataFrame,
     dividends: pd.DataFrame,
@@ -612,17 +631,8 @@ def build_portfolio_cashflows(
         }
     )
 
-    # Stock dividends carry no ISIN and stocks are keyed by name, whose spelling
-    # can differ in case between the sheets (e.g. Nvidia / NVIDIA).
     security_types = trades.groupby("isin")["security_type"].first()
-    key_by_lower = {key.lower(): key for key in security_types.index}
-    successor = dict(zip(mergers["isin_old"], mergers["isin_new"]))
-    dividend_key = (
-        dividends["isin"]
-        .where(dividends["isin"] != "", dividends["name"])
-        .replace(successor)
-        .map(lambda key: key_by_lower.get(key.lower(), key))
-    )
+    dividend_key = dividend_security_keys(dividends, security_types.index, mergers)
     unknown = sorted(set(dividend_key) - set(security_types.index))
     if unknown:
         logger.warning(f"Dividends without any trade are left out: {unknown}")

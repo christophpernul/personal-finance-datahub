@@ -150,3 +150,13 @@ PATH_CASHFLOW_EXPENSES_TARGET = TARGET_DIR / "target_cashflow__expenses.csv"
 # The same transactions aggregated per month, one column per category
 PATH_CASHFLOW_INCOMES_WIDE = TARGET_DIR / "target_cashflow__incomes_monthly.csv"
 PATH_CASHFLOW_EXPENSES_WIDE = TARGET_DIR / "target_cashflow__expenses_monthly.csv"
+
+# --- Portfolio: target stage (dashboard-ready) ---
+# One row per sold (closed) ETF/stock position with its buy and sell amount,
+# dividends, order and ongoing costs, net profit and return on investment
+PATH_SOLD_POSITIONS_TARGET = TARGET_DIR / "target_portfolio__sold_positions.csv"
+# Every cashflow of those positions [position_id, date, type, amount]; the
+# amounts of a position sum to its net profit
+PATH_SOLD_POSITION_FLOWS_TARGET = (
+    TARGET_DIR / "target_portfolio__sold_position_flows.csv"
+)

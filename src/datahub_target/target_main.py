@@ -8,7 +8,7 @@ import logging
 
 import pandas as pd
 
-from utils.file_io import get_config_file, save_data
+from utils.file_io import get_config_file, load_data, save_data
 from constants import (
     TOSHL_CATEGORY_MAP,
     PATH_INVESTMENT_COSTS,
@@ -16,7 +16,11 @@ from constants import (
     PATH_CASHFLOW_EXPENSES_TARGET,
     PATH_CASHFLOW_INCOMES_WIDE,
     PATH_CASHFLOW_EXPENSES_WIDE,
+    PATH_SOLD_POSITIONS_TARGET,
+    PATH_SOLD_POSITION_FLOWS_TARGET,
 )
+from datahub_stocks.transform.preprocessing import dividend_security_keys
+from datahub_target.transform.calculate_sold_positions import build_sold_positions
 from datahub_target.transform.calculate_target_tables import (
     map_tags_to_categories,
     build_investment_transactions,
@@ -42,6 +46,9 @@ def run_target(
     interest: pd.DataFrame,
     riester: pd.DataFrame,
     crypto_transfers: pd.DataFrame,
+    position_trades: pd.DataFrame,
+    position_dividends: pd.DataFrame,
+    mergers: pd.DataFrame,
 ) -> None:
     """Calculates and stores all dashboard-ready target tables.
 
@@ -58,6 +65,10 @@ def run_target(
         transaction-level equivalent (see `build_rebalancing_transactions`).
     crypto_transfers: EUR deposits to / withdrawals from the crypto exchanges
         ([date, exchange, amount]), as returned by `datahub_crypto.run_crypto`.
+    position_trades / position_dividends / mergers: every trade of the ETF and
+        stock positions (incl. rebalancing, after mergers and splits), the
+        received dividends and the ETF mergers, as returned by
+        `datahub_stocks.run_stocks`; they feed the sold positions.
     """
     calculate_cashflow_target_tables(
         cashflow_incomes,
@@ -68,6 +79,42 @@ def run_target(
         interest,
         riester,
         crypto_transfers,
+    )
+    calculate_sold_positions_target_tables(position_trades, position_dividends, mergers)
+
+
+def calculate_sold_positions_target_tables(
+    trades: pd.DataFrame, dividends: pd.DataFrame, mergers: pd.DataFrame
+) -> None:
+    """Builds and stores the sold (closed) ETF/stock positions and their single
+    cashflows (see `calculate_sold_positions`).
+
+    The ongoing costs come from the per-security investment-cost report; costs
+    of an ETF that was merged move onto its successor ISIN like its trades.
+    """
+    cost_report = load_data(PATH_INVESTMENT_COSTS, sep=",", decimal=".")
+    successor = dict(zip(mergers["isin_old"], mergers["isin_new"]))
+    costs = pd.DataFrame(
+        {
+            "date": pd.to_datetime(cost_report["Datum"], format="%d.%m.%Y"),
+            "isin": cost_report["ISIN"].str.strip().replace(successor),
+            "cost": cost_report["Kosten"],
+        }
+    )
+    sold_positions, flows = build_sold_positions(
+        trades=trades,
+        dividends=dividends,
+        dividend_keys=dividend_security_keys(
+            dividends, trades["isin"].unique(), mergers
+        ),
+        costs=costs,
+        valuation_date=pd.Timestamp.today().normalize(),
+    )
+    save_data(data=sold_positions, filepath=PATH_SOLD_POSITIONS_TARGET)
+    save_data(data=flows, filepath=PATH_SOLD_POSITION_FLOWS_TARGET)
+    logger.info(
+        f"Sold positions ({len(sold_positions)}) and their cashflows saved for "
+        f"the dashboard in {PATH_SOLD_POSITIONS_TARGET.parent}"
     )
 
 

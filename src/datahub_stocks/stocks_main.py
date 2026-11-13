@@ -289,6 +289,17 @@ def run_stocks():
     save_data(portfolio_cashflows, PATH_PORTFOLIO_CASHFLOWS)
     logger.info(f"Portfolio cashflows saved in {PATH_PORTFOLIO_CASHFLOWS}")
 
+    # Every trade of the actual ETF and stock positions (incl. rebalancing, after
+    # mergers and splits, so share counts add up), from which the target stage
+    # derives the sold positions.
+    position_trades = pd.concat(
+        [
+            etf_holdings.assign(security_type="ETF"),
+            stock_portfolio.assign(security_type="Aktie"),
+        ],
+        ignore_index=True,
+    )
+
     # The target stage books single transactions, so it gets the transaction-level
     # tables; the monthly aggregates above stay transform-stage outputs. Only
     # rebalancing is handed over monthly, since only its monthly net is a real
@@ -300,6 +311,8 @@ def run_stocks():
         monthly_rebalancing,
         interest,
         riester,
+        position_trades,
+        etf_mergers,
     )
 
 

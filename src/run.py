@@ -28,6 +28,8 @@ cashflow_incomes, cashflow_expenses = run_cashflow()
     monthly_rebalancing,
     interest,
     riester,
+    position_trades,
+    mergers,
 ) = run_stocks()
 crypto_transfers = run_crypto()
 run_target(
@@ -39,5 +41,8 @@ run_target(
     interest,
     riester,
     crypto_transfers,
+    position_trades,
+    dividends,
+    mergers,
 )
 disable_existing_loggers = False

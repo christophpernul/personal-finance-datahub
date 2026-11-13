@@ -28,8 +28,8 @@ datahub/
 ## Data processing
 
 The datahub pipeline (`run.py`) runs four stages — cashflow → stocks → crypto → target — and
-produces the dashboard-ready tables: **incomes**, **expenses**, **portfolio value** and
-**crypto portfolio value**.
+produces the dashboard-ready tables: **incomes**, **expenses**, **portfolio value**,
+**crypto portfolio value** and **sold positions**.
 
 ### Data sources
 
@@ -64,6 +64,28 @@ produces the dashboard-ready tables: **incomes**, **expenses**, **portfolio valu
 
 Cumulative monthly share holdings × current prices, combined into one table with a
 `security_type` of `ETF` or `Aktie`.
+
+### Sold positions
+
+`target_portfolio__sold_positions.csv` lists every sold (closed) ETF and stock position,
+`target_portfolio__sold_position_flows.csv` every cashflow of those positions
+(`position_id;date;type;amount`, the amounts of a position sum to its net profit).
+
+- A **position** opens with the first buy while nothing of the security is held and closes with
+  the sell that takes the holding back to zero (at most 1 % of the most shares held may be left,
+  since fractional ETF shares never sum to exactly zero). The rest of a sale spread over several
+  orders still belongs to the closed position. Buying the security again opens a new position
+  (`<isin>#2`, ...), so a sell-and-rebuy, e.g. to use the tax-free allowance, shows up as a sold
+  position flagged `rebought`. Partial sells of positions still held are not listed.
+- All trades count, rebalancing included; ETF mergers and stock splits are applied first.
+- **Costs**: the order costs of every buy and sell (whatever their sign in the sheets) plus the
+  ongoing costs of the per-security cost report (`comdirect_costs_combined.csv`). A yearly cost
+  is split over the positions of its security by the days each was held in that year. Costs
+  without an ISIN (depot fees, Trade Republic TER/fees) belong to no single position.
+- **Dividends** go to the position open on the payment date, or to the one sold last before it.
+- `net_profit` = sell proceeds + dividends − buy amount − order costs − ongoing costs,
+  `roi_pct` = `net_profit` / buy amount, `annual_return_pct` = money-weighted return per year
+  (XIRR) of the position's flows.
 
 ### Crypto
 
