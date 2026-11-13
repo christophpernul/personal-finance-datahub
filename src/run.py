@@ -1,5 +1,6 @@
 import logging
 
+from datahub_cash.cash_main import run_cash
 from datahub_cashflow.cashflow_main import run_cashflow
 from datahub_crypto.crypto_main import run_crypto
 from datahub_stocks.stocks_main import run_stocks
@@ -32,6 +33,7 @@ cashflow_incomes, cashflow_expenses = run_cashflow()
     mergers,
 ) = run_stocks()
 crypto_transfers = run_crypto()
+run_cash()
 run_target(
     cashflow_incomes,
     cashflow_expenses,

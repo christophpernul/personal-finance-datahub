@@ -43,6 +43,7 @@ produces the dashboard-ready tables: **incomes**, **expenses**, **portfolio valu
 | Crypto exchange exports | `source/crypto/`: `kraken_ledgers_*.csv`, `binance_tradehistory_*.csv`, `binance_deposits_*.xlsx`, `kucoin_trades_*.csv`, `kucoin_deposits_*.csv` | crypto portfolio, `Crypto` income/expenses |
 | Crypto master data | `source_crypto__master_data.csv` (coin → yahoo symbol) | crypto portfolio valuation |
 | Manual transactions | `source_manual__transactions.csv` (every manual correction of the source data, see below) | crypto portfolio, incomes & expenses |
+| Cash balance sheet | `source/cash/source_cash_balance_sheet.ods` (sheets: Konten, Kontostaende, Festgeld) | account balances, fixed-term deposits, available vs. bound cash, liabilities |
 
 ### Incomes
 
@@ -114,6 +115,33 @@ balance into another coin. Kraken books both sides as two unrelated `transfer` r
 different refids and dates, which would otherwise look like coins vanishing and an airdrop
 appearing. Such pairs are marked in the manual transactions (`crypto_conversion`) and booked as
 one trade, so the cost basis of the delisted coin moves on to the coin received.
+
+### Cash
+
+Where cash lies, at which interest rate, how long fixed-term deposits keep it bound, and what is
+owed on credit cards and loans. The workbook `source/cash/source_cash_balance_sheet.ods` is
+maintained by hand (German headers):
+
+| Sheet | Columns | Content |
+| --- | --- | --- |
+| `Konten` | Konto-ID, Bank, Plattform, Name, Typ, Zinssatz, Zinssatz gültig bis, Eröffnet, Geschlossen, Kommentar | one row per account; `Typ` is `Giro`, `Tagesgeld`, `Verrechnung` or `Sparbuch` for cash, `Kreditkarte` or `Kredit` for liabilities; `Zinssatz` is the *current* rate as percentage cell |
+| `Kontostaende` | Datum, Konto-ID, Saldo, Kommentar | account balances, usually one per account and month end; liabilities as shown by the bank, i.e. negative (a positive one fails) |
+| `Festgeld` | Vertrags-ID, Bank, Plattform, Name, Betrag, Zinssatz, Beginn, Ende, Auszahlungskonto, Kommentar | one row per fixed-term deposit; a renewal is a new row; `Auszahlungskonto` is a Konto-ID |
+
+`Plattform` names a broker platform (e.g. Raisin) when the money lies with a partner bank. No
+interest amounts are calculated: received interest stays in the `Zinsen` sheet of the trades file.
+
+- `transform_cash__balances_monthly.csv` — balance of every account per month end, from its first
+  balance up to the current month. A month without its own balance carries the latest one forward
+  (`balance_date`), flagged `is_stale` when older than 35 days; months after `Geschlossen` are dropped.
+  `is_liability` marks credit cards and loans.
+- `transform_cash__term_deposits.csv` — one row per deposit with `status` (`läuft` / `abgelaufen` /
+  `zukünftig`; it is paid out on `Ende`), `term_days`, `days_remaining` and `progress_pct`.
+- `transform_cash__liquidity_monthly.csv` — all cash per month end split into `verfügbar` (cash
+  account balances) and `gebunden` (deposits running at the month end), plus `verbindlichkeiten`
+  (credit card and loan balances, negative). After the current month it is a projection
+  (`is_projection`) until the last maturity: balances and liabilities stay as they are and each
+  maturing deposit moves its `Betrag` from `gebunden` to `verfügbar`.
 
 ### Manual transactions
 
