@@ -16,6 +16,8 @@ from src.datahub_stocks.transform.preprocessing import (
     preprocess_rebalancing,
     combine_portfolio_values,
     apply_splits,
+    build_portfolio_cashflows,
+    current_depots,
 )
 
 
@@ -338,6 +340,7 @@ def stock_trades_raw():
             "Kurs": [40.65, 3.25],
             "Betrag": [203.25, 227.50],
             "Kosten": [1.0, 6.4],
+            "Anbieter": ["traderepublic", "comdirect"],
             "Name": ["Coca Cola", "S&P500 Put"],
             "ISIN": [float("nan"), float("nan")],
         }
@@ -408,6 +411,7 @@ def test_preprocess_stock_trades_rounds_shares_to_integers():
             "Kurs": [77.50],
             "Betrag": [156.0],
             "Kosten": [1.0],
+            "Anbieter": ["traderepublic"],
             "Name": ["BioNTech"],
             "ISIN": [float("nan")],
         }
@@ -487,6 +491,7 @@ def test_preprocess_rebalancing_buy_and_sell_signs(rebalancing_raw):
         "cost",
         "shares",
         "trade_type",
+        "depot",
     ]
     buy = result[result["isin"] == "A"].iloc[0]
     assert buy["trade_type"] == "buy"
@@ -543,6 +548,7 @@ def test_aggregate_monthly_rebalancing_expense_when_buys_dominate():
                 "shares": [float("nan"), 25.11],
                 "name": ["ETF A", "ETF B"],
                 "isin": ["A", "B"],
+                "depot": ["traderepublic"] * 2,
             }
         )
     )
@@ -565,3 +571,69 @@ def test_apply_splits_ignores_other_securities(tesla_split):
     )
     result = apply_splits(portfolio, tesla_split)
     assert result["shares"].iloc[0] == 5.0
+
+
+@pytest.mark.ut
+def test_build_portfolio_cashflows_signs_dividends_and_value():
+    trades = pd.DataFrame(
+        {
+            "date": pd.to_datetime(["2023-01-10", "2024-03-05", "2023-02-01"]),
+            "isin": ["IE1", "IE1", "NVIDIA"],
+            "total_investment": [1000.0, -400.0, 300.0],  # buy, sell, buy
+            "cost": [1.0, 1.0, float("nan")],
+            "trade_type": ["buy", "sell", "buy"],
+            "security_type": ["ETF", "ETF", "Aktie"],
+        }
+    )
+    dividends = pd.DataFrame(
+        {
+            "date": pd.to_datetime(["2023-06-30", "2023-07-31", "2023-08-31"]),
+            "isin": ["OLD1", "", ""],
+            "name": ["Old ETF", "Nvidia", "Mercedes Benz"],
+            "dividend": [5.0, 2.0, 3.0],
+        }
+    )
+    value = pd.DataFrame(
+        {
+            "isin": ["IE1", "NVIDIA"],
+            "value": [900.0, 500.0],
+            "security_type": ["ETF", "Aktie"],
+        }
+    )
+    mergers = pd.DataFrame({"isin_old": ["OLD1"], "isin_new": ["IE1"]})
+
+    result = build_portfolio_cashflows(
+        trades, dividends, value, mergers, pd.Timestamp("2026-10-25")
+    )
+
+    flows = result.groupby(["isin", "type"])["amount"].sum()
+    assert flows["IE1", "buy"] == pytest.approx(-1001.0)  # spend + fee
+    assert flows["IE1", "sell"] == pytest.approx(399.0)  # proceeds - fee
+    assert flows["IE1", "dividend"] == pytest.approx(5.0)  # merged ISIN
+    assert flows["NVIDIA", "dividend"] == pytest.approx(2.0)  # name, any case
+    assert flows["NVIDIA", "value"] == pytest.approx(500.0)
+    assert "Mercedes Benz" not in result["isin"].values  # no trades
+    assert (result.loc[result["type"] == "value", "date"] == "2026-10-25").all()
+
+
+@pytest.mark.ut
+def test_current_depots_nets_trades_and_lists_split_positions():
+    trades = pd.DataFrame(
+        {
+            "isin": ["A", "A", "B", "B", "B", "C"],
+            "depot": [
+                "comdirect",
+                "comdirect",  # fully sold up to a rounding leftover
+                "traderepublic",
+                "comdirect",
+                "flatex",
+                "traderepublic",
+            ],
+            "shares": [10.0, -9.9999, 1.0, 3.0, 2.0, 5.0],
+        }
+    )
+    trades.loc[len(trades)] = {"isin": "A", "depot": "traderepublic", "shares": 4.0}
+    result = current_depots(trades).set_index("isin")["depot"]
+    assert result["A"] == "traderepublic"
+    assert result["B"] == "comdirect, flatex, traderepublic"
+    assert result["C"] == "traderepublic"

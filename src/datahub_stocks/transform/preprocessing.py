@@ -75,6 +75,7 @@ STOCK_TRADES_REQUIRED_COLUMNS = {
     "Kurs",
     "Betrag",
     "Kosten",
+    "Anbieter",
     "Name",
 }
 SPLITS_REQUIRED_COLUMNS = {
@@ -89,6 +90,7 @@ REBALANCING_REQUIRED_COLUMNS = {
     "price",
     "amount",
     "cost",
+    "depot",
     "shares",
     "name",
     "isin",
@@ -180,7 +182,7 @@ def preprocess_rebalancing(data: pd.DataFrame) -> pd.DataFrame:
 
     float_cols = ["price", "amount", "cost", "shares"]
     data[float_cols] = data[float_cols].apply(pd.to_numeric, errors="coerce")
-    data = strip_vals(data, ["name", "isin", "type"])
+    data = strip_vals(data, ["name", "isin", "type", "depot"])
 
     is_buy = data["amount"] < 0
     data["trade_type"] = is_buy.map({True: "buy", False: "sell"})
@@ -204,6 +206,7 @@ def preprocess_rebalancing(data: pd.DataFrame) -> pd.DataFrame:
             "cost",
             "shares",
             "trade_type",
+            "depot",
         ]
     ]
 
@@ -251,6 +254,7 @@ def preprocess_stock_trades(data: pd.DataFrame, is_buy: bool) -> pd.DataFrame:
             "Kurs": "price",
             "Betrag": "amount",
             "Kosten": "cost",
+            "Anbieter": "depot",
             "Name": "name",
         }
     )
@@ -260,7 +264,7 @@ def preprocess_stock_trades(data: pd.DataFrame, is_buy: bool) -> pd.DataFrame:
 
     float_cols = ["price", "amount", "cost"]
     data[float_cols] = data[float_cols].apply(pd.to_numeric, errors="coerce")
-    data = strip_vals(data, ["name", "type"])
+    data = strip_vals(data, ["name", "type", "depot"])
 
     # Stocks carry no ISIN; use the name as the security identifier.
     data["isin"] = data["name"]
@@ -285,6 +289,7 @@ def preprocess_stock_trades(data: pd.DataFrame, is_buy: bool) -> pd.DataFrame:
             "cost",
             "shares",
             "trade_type",
+            "depot",
         ]
     ]
 
@@ -570,6 +575,85 @@ def aggregate_monthly_rebalancing(rebalancing: pd.DataFrame) -> pd.DataFrame:
     return monthly[["date", "expense_rebalancing", "income_rebalancing"]]
 
 
+def build_portfolio_cashflows(
+    trades: pd.DataFrame,
+    dividends: pd.DataFrame,
+    portfolio_value: pd.DataFrame,
+    mergers: pd.DataFrame,
+    valuation_date: pd.Timestamp,
+) -> pd.DataFrame:
+    """Lists every cashflow of every ETF and stock from the investor's view, so
+    money-weighted (XIRR) returns can be computed downstream.
+
+    Parameters
+    ----------
+    trades: preprocessed buys, sells and rebalancing trades (after mergers) with
+        [date, isin, total_investment, cost, trade_type, security_type]
+    dividends: preprocessed dividends [date, isin, name, dividend]
+    portfolio_value: combined portfolio value (`combine_portfolio_values`)
+    mergers: preprocessed mergers, to move dividends of a merged ETF onto its
+        successor ISIN
+    valuation_date: date of the current prices in `portfolio_value`
+
+    Returns [date, isin, security_type, type, amount] where `type` is buy, sell,
+    dividend or value. `amount` is negative for money paid in (buy spend and
+    order fees) and positive for money received (sell proceeds net of fees,
+    dividends); the `value` rows hold the current value of every held position
+    as if it were sold on `valuation_date`.
+    """
+    trade_flows = pd.DataFrame(
+        {
+            "date": trades["date"],
+            "isin": trades["isin"],
+            "security_type": trades["security_type"],
+            "type": trades["trade_type"],
+            # total_investment: +spent on buys, -proceeds on sells
+            "amount": -(trades["total_investment"] + trades["cost"].fillna(0.0)),
+        }
+    )
+
+    # Stock dividends carry no ISIN and stocks are keyed by name, whose spelling
+    # can differ in case between the sheets (e.g. Nvidia / NVIDIA).
+    security_types = trades.groupby("isin")["security_type"].first()
+    key_by_lower = {key.lower(): key for key in security_types.index}
+    successor = dict(zip(mergers["isin_old"], mergers["isin_new"]))
+    dividend_key = (
+        dividends["isin"]
+        .where(dividends["isin"] != "", dividends["name"])
+        .replace(successor)
+        .map(lambda key: key_by_lower.get(key.lower(), key))
+    )
+    unknown = sorted(set(dividend_key) - set(security_types.index))
+    if unknown:
+        logger.warning(f"Dividends without any trade are left out: {unknown}")
+    known = dividend_key.isin(security_types.index)
+    dividend_flows = pd.DataFrame(
+        {
+            "date": dividends.loc[known, "date"],
+            "isin": dividend_key[known],
+            "security_type": dividend_key[known].map(security_types),
+            "type": "dividend",
+            "amount": dividends.loc[known, "dividend"],
+        }
+    )
+
+    value_flows = pd.DataFrame(
+        {
+            "date": valuation_date,
+            "isin": portfolio_value["isin"],
+            "security_type": portfolio_value["security_type"],
+            "type": "value",
+            "amount": portfolio_value["value"],
+        }
+    )
+
+    cashflows = pd.concat(
+        [trade_flows, dividend_flows, value_flows], ignore_index=True
+    ).dropna(subset=["amount"])
+    cashflows["date"] = pd.to_datetime(cashflows["date"]).dt.strftime("%Y-%m-%d")
+    return cashflows.sort_values(["date", "isin"]).reset_index(drop=True)
+
+
 def combine_portfolio_values(
     etf_value: pd.DataFrame, stock_value: pd.DataFrame
 ) -> pd.DataFrame:
@@ -581,6 +665,23 @@ def combine_portfolio_values(
     etf["security_type"] = "ETF"
     stock["security_type"] = "Aktie"
     return pd.concat([etf, stock], ignore_index=True)
+
+
+def current_depots(portfolio: pd.DataFrame) -> pd.DataFrame:
+    """Depot (broker) holding each position, from the trades' `depot` column.
+
+    Shares bought and sold are netted per ISIN and depot. A depot counts if it
+    holds more than 1 % of the position, so rounding leftovers of a fully sold
+    depot don't show up; a position held in several depots lists all of them,
+    largest first and comma-separated. Returns [isin, depot]."""
+    shares = portfolio.groupby(["isin", "depot"])["shares"].sum().reset_index()
+    shares["share"] = shares["shares"] / shares.groupby("isin")["shares"].transform(
+        "sum"
+    )
+    held = shares[shares["share"] > 0.01].sort_values(
+        ["isin", "shares"], ascending=[True, False]
+    )
+    return held.groupby("isin", as_index=False)["depot"].agg(", ".join)
 
 
 def calculate_portfolio_value(
@@ -614,6 +715,7 @@ def calculate_portfolio_value(
     )
     result = result.merge(prices[["isin", "price"]], on="isin", how="left")
     result = result.merge(total_costs, on="isin", how="left")
+    result = result.merge(current_depots(portfolio), on="isin", how="left")
     result["value"] = result["cumulative_shares"] * result["price"]
     result["value_gained"] = (
         result["value"] - result["total_investment"] - result["total_cost"]
@@ -648,5 +750,6 @@ def calculate_portfolio_value(
             "symbol",
             "type",
             "currency",
+            "depot",
         ]
     ]

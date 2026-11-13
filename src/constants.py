@@ -91,6 +91,9 @@ PATH_STOCKS_PORTFOLIO_VALUE = TRANSFORM_DIR / "transform_stocks__portfolio_value
 
 # Combined ETF + individual-stock portfolio value with a `security_type` column
 PATH_PORTFOLIO_VALUE_COMBINED = TRANSFORM_DIR / "transform_portfolio__value.csv"
+# Every dated ETF/stock cashflow (trades, dividends) plus the current value of
+# each held position, for money-weighted (XIRR) returns
+PATH_PORTFOLIO_CASHFLOWS = TRANSFORM_DIR / "transform_portfolio__cashflows.csv"
 
 # --- Crypto: source stage ---
 # Raw exchange exports, picked up by file pattern so newer exports only need to
