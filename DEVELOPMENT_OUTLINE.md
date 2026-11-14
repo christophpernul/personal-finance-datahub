@@ -1,5 +1,8 @@
 # Architecture Overview
 
+> This is the original design outline. The pipeline as it is implemented today (stages
+> source → transform → target, input files, calculations) is described in the README.
+
 We aim to split the application part from the data processing.
 There should be a single application module, that only serves the
 application by loading already preprocessed data. Furthermore the data
