@@ -23,10 +23,12 @@ from datahub_stocks.transform.preprocessing import (
     aggregate_monthly_interest,
     aggregate_monthly_riester,
     calculate_portfolio_value,
+    calculate_ter_costs,
     combine_portfolio_values,
     build_portfolio_cashflows,
 )
 from datahub_stocks.transform.riester import (
+    RIESTER_ID,
     preprocess_riester_fees,
     preprocess_riester_values,
     calculate_riester_value,
@@ -170,8 +172,11 @@ def run_stocks():
         filepath=PATH_ETF_MASTER_DATA, used_library="pandas", file_type="csv"
     )
     # TODO: Store these snapshots to create a history, also do not save data inside the function!
+    # The Riester row only classifies the contract: Yahoo knows no `RIESTER`
     initialize_market_snapshot(
-        etf_isins=master_data["isin"].dropna().unique().tolist(),
+        etf_isins=[
+            isin for isin in master_data["isin"].dropna().unique() if isin != RIESTER_ID
+        ],
         out_path=PATH_ETF_MARKET_SNAPSHOT,
     )
     master_data = preprocess_master_data(master_data)
@@ -267,8 +272,13 @@ def run_stocks():
     # Calculate current portfolio value (ETFs and individual stocks). Rebalancing
     # trades are part of the holdings, so `etf_holdings` (regular + rebalancing)
     # supplies both the share counts and the invested-amount / cost basis.
+    # Estimated ongoing costs (TER) of every ETF so far, from the monthly
+    # holdings valued at the historic monthly prices
+    etf_ter_costs = calculate_ter_costs(
+        etf_shares, etf_historic_prices, etf_current_prices, master_data
+    )
     portfolio_value = calculate_portfolio_value(
-        etf_shares, etf_current_prices, master_data, etf_holdings
+        etf_shares, etf_current_prices, master_data, etf_holdings, etf_ter_costs
     )
     save_data(portfolio_value, PATH_ETF_PORTFOLIO_VALUE)
 
@@ -284,7 +294,9 @@ def run_stocks():
     )
     # The Riester contract joins as one more position (security_type Riester),
     # valued by hand instead of by a price
-    riester_value = calculate_riester_value(riester, riester_fees, riester_values)
+    riester_value = calculate_riester_value(
+        riester, riester_fees, riester_values, master_data
+    )
     save_data(
         pd.concat([combined_portfolio_value, riester_value], ignore_index=True),
         PATH_PORTFOLIO_VALUE_COMBINED,

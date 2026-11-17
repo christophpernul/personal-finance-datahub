@@ -18,6 +18,8 @@ from src.datahub_stocks.transform.preprocessing import (
     apply_splits,
     build_portfolio_cashflows,
     current_depots,
+    calculate_portfolio_value,
+    calculate_ter_costs,
 )
 
 
@@ -637,3 +639,77 @@ def test_current_depots_nets_trades_and_lists_split_positions():
     assert result["A"] == "traderepublic"
     assert result["B"] == "comdirect, flatex, traderepublic"
     assert result["C"] == "traderepublic"
+
+
+@pytest.mark.ut
+def test_calculate_ter_costs_values_each_held_month():
+    shares = pd.DataFrame(
+        {
+            "date": pd.to_datetime(
+                ["2024-01-31", "2024-02-29", "2024-03-31", "2024-03-31"]
+            ),
+            "isin": ["A", "A", "A", "S"],
+            "cumulative_shares": [10.0, 10.0, 20.0, 5.0],
+        }
+    )
+    historic = pd.DataFrame(
+        {
+            # Yahoo labels monthly bars with the month start in exchange time
+            "date": pd.to_datetime(
+                ["2024-01-01 00:00:00+01:00", "2024-03-01 00:00:00+01:00"]
+            ),
+            "isin": ["A", "A"],
+            "price": [100.0, 120.0],
+        }
+    )
+    current = pd.DataFrame({"isin": ["A", "S"], "price": [130.0, 50.0]})
+    master = pd.DataFrame({"isin": ["A", "S"], "ter": [1.2, None]})
+    result = calculate_ter_costs(shares, historic, current, master).set_index("isin")
+    # Jan 10 x 100, Feb no price -> Jan's 100, Mar 20 x 120; each x 1.2 % / 12
+    expected = (10 * 100 + 10 * 100 + 20 * 120) * 0.012 / 12
+    assert result.loc["A", "ter_cost_to_date"] == pytest.approx(expected)
+    assert result.loc["S", "ter_cost_to_date"] == 0.0  # no TER
+
+
+@pytest.mark.ut
+def test_calculate_portfolio_value_passes_attributes_and_ter_costs():
+    shares = pd.DataFrame(
+        {
+            "date": pd.to_datetime(["2024-03-31", "2024-03-31"]),
+            "isin": ["A", "B"],
+            "cumulative_shares": [2.0, 4.0],
+        }
+    )
+    prices = pd.DataFrame({"isin": ["A", "B"], "price": [10.0, 5.0]})
+    # B's master table lacks replication / etf_type (like individual stocks)
+    master = pd.DataFrame(
+        {
+            "isin": ["A", "B"],
+            "name": ["Fund A", "Stock B"],
+            "symbol": ["A", "B"],
+            "type": ["ETF", "EQUITY"],
+            "currency": ["EUR", "USD"],
+            "ter": [0.2, None],
+            "region": ["world", "usa"],
+            "distribution": ["accumulating", None],
+        }
+    )
+    trades = pd.DataFrame(
+        {
+            "isin": ["A", "B"],
+            "cost": [1.0, 1.0],
+            "total_investment": [15.0, 18.0],
+            "depot": ["traderepublic", "comdirect"],
+            "shares": [2.0, 4.0],
+        }
+    )
+    ter_costs = pd.DataFrame({"isin": ["A"], "ter_cost_to_date": [0.5]})
+    result = calculate_portfolio_value(
+        shares, prices, master, trades, ter_costs
+    ).set_index("isin")
+    assert result.loc["A", "ter"] == 0.2
+    assert result.loc["A", "region"] == "world"
+    assert result.loc["A", "distribution"] == "accumulating"
+    assert pd.isna(result.loc["B", "replication"])
+    assert result.loc["A", "ter_cost_to_date"] == 0.5
+    assert result.loc["B", "ter_cost_to_date"] == 0.0

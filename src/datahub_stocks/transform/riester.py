@@ -9,6 +9,13 @@ The fees are taken out of the contract (by selling parts of it), so the
 current value is already net of them: unlike an ETF, whose order costs are paid
 on top, the gain is `value - total_investment`, and `total_cost` only reports
 the fees that were charged.
+
+For the portfolio breakdowns the contract is classified by its row in the
+ETF master data (``isin`` = ``RIESTER``): ``region``, ``distribution``,
+``replication``, ``etf_type`` and ``ter``. Left empty there, ``ter`` is the
+effective cost rate: the fees of the last 12 months of the fee export relative
+to the current value. ``ter_cost_to_date`` stays 0, because every fee charged
+so far is already in ``total_cost``.
 """
 
 import logging
@@ -23,6 +30,8 @@ RIESTER_ID = "RIESTER"
 RIESTER_NAME = "Riester (Raisin)"
 RIESTER_SECURITY_TYPE = "Riester"
 RIESTER_DEPOT = "raisin"
+# Classification taken from the contract's row in the ETF master data
+ATTRIBUTE_COLUMNS = ["region", "distribution", "replication", "etf_type"]
 
 FEE_COLUMN_MAP = {
     "Datum": "date",
@@ -50,6 +59,12 @@ PORTFOLIO_VALUE_COLUMNS = [
     "type",
     "currency",
     "depot",
+    "ter",
+    "region",
+    "distribution",
+    "replication",
+    "etf_type",
+    "ter_cost_to_date",
     "security_type",
 ]
 CASHFLOW_COLUMNS = ["date", "isin", "security_type", "type", "amount"]
@@ -94,16 +109,51 @@ def preprocess_riester_values(data: pd.DataFrame) -> pd.DataFrame:
     return values[["date", "value"]].sort_values("date").reset_index(drop=True)
 
 
+def effective_fee_rate(fees: pd.DataFrame, value: float) -> float:
+    """Fees of the 12 months up to the last fee booking, in % of ``value``.
+
+    NaN without fees or value; the fee schedule is not modelled, so this is
+    what the contract actually cost over the last year."""
+    if fees.empty or not value:
+        return np.nan
+    last = fees["date"].max()
+    recent = fees[fees["date"] > last - pd.DateOffset(years=1)]
+    return float(recent["fee"].sum()) / value * 100
+
+
+def _master_row(master_data: pd.DataFrame | None) -> pd.Series:
+    """The contract's row of the ETF master data (empty if there is none)."""
+    columns = ["ter", *ATTRIBUTE_COLUMNS]
+    if master_data is None or "isin" not in master_data.columns:
+        return pd.Series(np.nan, index=columns)
+    rows = master_data[master_data["isin"] == RIESTER_ID]
+    if rows.empty:
+        logger.warning(
+            f"No `{RIESTER_ID}` row in the ETF master data; the Riester "
+            "contract is not classified"
+        )
+        return pd.Series(np.nan, index=columns)
+    return rows.iloc[0].reindex(columns)
+
+
 def calculate_riester_value(
-    contributions: pd.DataFrame, fees: pd.DataFrame, values: pd.DataFrame
+    contributions: pd.DataFrame,
+    fees: pd.DataFrame,
+    values: pd.DataFrame,
+    master_data: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
     """The contract as one row of the portfolio value table: the latest
     recorded value, all contributions as `total_investment` and all fees as
-    `total_cost`. Empty when no value has been recorded yet."""
+    `total_cost`, classified by its `RIESTER` row of ``master_data``. Empty
+    when no value has been recorded yet."""
     if values.empty:
         logger.warning("No Riester value recorded yet; the contract is left out")
         return pd.DataFrame(columns=PORTFOLIO_VALUE_COLUMNS)
     latest = values.iloc[-1]
+    master = _master_row(master_data)
+    ter = pd.to_numeric(master["ter"], errors="coerce")
+    if pd.isna(ter):
+        ter = effective_fee_rate(fees, latest["value"])
     invested = float(contributions["amount"].sum())
     gained = latest["value"] - invested
     row = {
@@ -123,6 +173,9 @@ def calculate_riester_value(
         "type": RIESTER_SECURITY_TYPE,
         "currency": "EUR",
         "depot": RIESTER_DEPOT,
+        "ter": ter,
+        **{col: master[col] for col in ATTRIBUTE_COLUMNS},
+        "ter_cost_to_date": 0.0,
         "security_type": RIESTER_SECURITY_TYPE,
     }
     return pd.DataFrame([row], columns=PORTFOLIO_VALUE_COLUMNS)
