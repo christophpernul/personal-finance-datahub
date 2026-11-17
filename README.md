@@ -141,8 +141,8 @@ pure investment expense.
     `commodity`.
 
   A value left empty shows as *Unknown*. The Riester contract has its own row with `isin`
-  `RIESTER` (no symbol, so no price is fetched): its classification, and `ter` if you want to
-  set one by hand (empty = the fees of the last 12 months / value). Re-running
+  `RIESTER` (no symbol, so no price is fetched) for its classification; its `ter` stays empty
+  (its costs are the fees of the Raisin export). Re-running
   `init_master_data` rewrites the file, so keep a copy of the hand-filled columns and this row.
 - **`stocks/source_stocks__master_data.csv`** — `name;symbol;currency;type;ter;region`, one row per
   stock, `name` spelled as in the trade sheets, `symbol` the Yahoo ticker (e.g. `AMZN`), `region`
@@ -251,9 +251,8 @@ price):
   contract, so they already lower the value (for ETFs the order fees are paid on top).
 - **Classification**: `region`, `distribution`, `replication`, `etf_type` from the `RIESTER` row
   of `source_etf__master_data.csv` (without that row the contract is unclassified).
-- **TER** (`ter`) = the `ter` of that row, or if empty the fees of the 12 months up to the last
-  booking of the fee export / value, in %: what the contract actually cost over the last year.
-  `ter_cost_to_date` is 0, as every fee is already in the costs.
+- **No TER**: `ter` is empty and `ter_cost_to_date` 0; the contract's costs are only the fees of
+  the Raisin export (`total_cost`).
 
 ### Returns per year (XIRR)
 

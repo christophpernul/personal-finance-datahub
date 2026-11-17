@@ -8,7 +8,6 @@ from src.datahub_stocks.transform.riester import (
     RIESTER_ID,
     build_riester_cashflows,
     calculate_riester_value,
-    effective_fee_rate,
     preprocess_riester_fees,
     preprocess_riester_values,
 )
@@ -123,20 +122,12 @@ def test_build_riester_cashflows(contributions, values):
 
 
 @pytest.mark.ut
-def test_effective_fee_rate_uses_the_last_12_months_of_fees():
-    fees = preprocess_riester_fees(_fee_export())
-    # last booking 03.12.2020: 18.00 + 6.27 - 6.27 + 2.00 fall within a year
-    assert effective_fee_rate(fees, 2000.0) == pytest.approx(20.0 / 2000 * 100)
-    assert np.isnan(effective_fee_rate(fees.iloc[0:0], 2000.0))
-
-
-@pytest.mark.ut
 def test_calculate_riester_value_classifies_by_master_data(contributions, values):
     fees = preprocess_riester_fees(_fee_export())
     master = pd.DataFrame(
         {
             "isin": ["IE1", RIESTER_ID],
-            "ter": [0.2, np.nan],
+            "ter": [0.2, 0.9],
             "region": ["usa", "world"],
             "distribution": ["distributing", "accumulating"],
             "replication": ["physical", "physical"],
@@ -147,13 +138,10 @@ def test_calculate_riester_value_classifies_by_master_data(contributions, values
     assert row["region"] == "world"
     assert row["distribution"] == "accumulating"
     assert row["etf_type"] == "index"
-    # no TER in the master data: the fees of the last 12 months / value
-    assert row["ter"] == pytest.approx(20.0 / 2500 * 100)
-    assert row["ter_cost_to_date"] == 0.0  # fees are already in total_cost
-
-    master.loc[master["isin"] == RIESTER_ID, "ter"] = 0.9
-    row = calculate_riester_value(contributions, fees, values, master).iloc[0]
-    assert row["ter"] == 0.9  # a TER entered by hand wins
+    # no TER, even if the master row has one: its costs are the fees
+    assert pd.isna(row["ter"])
+    assert row["total_cost"] == pytest.approx(27.90)
+    assert row["ter_cost_to_date"] == 0.0
 
 
 @pytest.mark.ut
@@ -163,4 +151,4 @@ def test_calculate_riester_value_without_master_row_is_unclassified(
     fees = preprocess_riester_fees(_fee_export())
     row = calculate_riester_value(contributions, fees, values).iloc[0]
     assert pd.isna(row["region"])
-    assert row["ter"] == pytest.approx(20.0 / 2500 * 100)
+    assert pd.isna(row["ter"])

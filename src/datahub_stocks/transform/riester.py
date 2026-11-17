@@ -12,10 +12,8 @@ the fees that were charged.
 
 For the portfolio breakdowns the contract is classified by its row in the
 ETF master data (``isin`` = ``RIESTER``): ``region``, ``distribution``,
-``replication``, ``etf_type`` and ``ter``. Left empty there, ``ter`` is the
-effective cost rate: the fees of the last 12 months of the fee export relative
-to the current value. ``ter_cost_to_date`` stays 0, because every fee charged
-so far is already in ``total_cost``.
+``replication`` and ``etf_type``. It has no ``ter``: its costs are only the
+fees of the Raisin export (``total_cost``), so ``ter_cost_to_date`` is 0.
 """
 
 import logging
@@ -109,21 +107,9 @@ def preprocess_riester_values(data: pd.DataFrame) -> pd.DataFrame:
     return values[["date", "value"]].sort_values("date").reset_index(drop=True)
 
 
-def effective_fee_rate(fees: pd.DataFrame, value: float) -> float:
-    """Fees of the 12 months up to the last fee booking, in % of ``value``.
-
-    NaN without fees or value; the fee schedule is not modelled, so this is
-    what the contract actually cost over the last year."""
-    if fees.empty or not value:
-        return np.nan
-    last = fees["date"].max()
-    recent = fees[fees["date"] > last - pd.DateOffset(years=1)]
-    return float(recent["fee"].sum()) / value * 100
-
-
 def _master_row(master_data: pd.DataFrame | None) -> pd.Series:
     """The contract's row of the ETF master data (empty if there is none)."""
-    columns = ["ter", *ATTRIBUTE_COLUMNS]
+    columns = ATTRIBUTE_COLUMNS
     if master_data is None or "isin" not in master_data.columns:
         return pd.Series(np.nan, index=columns)
     rows = master_data[master_data["isin"] == RIESTER_ID]
@@ -151,9 +137,6 @@ def calculate_riester_value(
         return pd.DataFrame(columns=PORTFOLIO_VALUE_COLUMNS)
     latest = values.iloc[-1]
     master = _master_row(master_data)
-    ter = pd.to_numeric(master["ter"], errors="coerce")
-    if pd.isna(ter):
-        ter = effective_fee_rate(fees, latest["value"])
     invested = float(contributions["amount"].sum())
     gained = latest["value"] - invested
     row = {
@@ -173,7 +156,8 @@ def calculate_riester_value(
         "type": RIESTER_SECURITY_TYPE,
         "currency": "EUR",
         "depot": RIESTER_DEPOT,
-        "ter": ter,
+        # no TER: the costs are the fees charged (total_cost)
+        "ter": np.nan,
         **{col: master[col] for col in ATTRIBUTE_COLUMNS},
         "ter_cost_to_date": 0.0,
         "security_type": RIESTER_SECURITY_TYPE,
