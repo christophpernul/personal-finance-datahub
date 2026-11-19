@@ -30,6 +30,15 @@ def _latest_name(names: pd.Series, holdings: pd.Series, dates: pd.Series) -> pd.
     return holdings.map(latest)
 
 
+def _unique_names(names: pd.Series, holdings: pd.Series) -> pd.Series:
+    """Append the holding id to a name that several holdings share (e.g. two
+    fixed-term deposits at the same provider), so each keeps its own name."""
+    pairs = pd.DataFrame({"name": names, "holding": holdings})
+    shared = pairs.drop_duplicates().groupby("name")["holding"].nunique() > 1
+    clash = names.map(shared).fillna(False).astype(bool)
+    return names.where(~clash, names + " (" + holdings + ")")
+
+
 def build_earnings(dividends: pd.DataFrame, interest: pd.DataFrame) -> pd.DataFrame:
     """Combine received dividends and interest into one table of payments.
 
@@ -66,6 +75,7 @@ def build_earnings(dividends: pd.DataFrame, interest: pd.DataFrame) -> pd.DataFr
         }
     )
     earnings = pd.concat([div, intr], ignore_index=True)
+    earnings["name"] = _unique_names(earnings["name"], earnings["holding"])
     earnings = earnings[earnings["amount"].notna() & (earnings["amount"] != 0.0)]
     earnings = earnings.sort_values(["date", "kind", "holding"], kind="stable")
     earnings["date"] = earnings["date"].dt.strftime("%Y-%m-%d")

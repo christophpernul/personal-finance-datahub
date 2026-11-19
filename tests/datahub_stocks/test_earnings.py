@@ -69,3 +69,23 @@ def test_build_earnings_categorises_and_names_holdings(dividends, interest):
 def test_build_earnings_without_interest(dividends, interest):
     result = build_earnings(dividends, interest.iloc[0:0])
     assert set(result["kind"]) == {"dividend"}
+
+
+@pytest.mark.ut
+def test_build_earnings_keeps_accounts_with_the_same_name_apart(dividends, interest):
+    # two fixed-term deposits at the same provider get the same account name
+    two_deposits = pd.DataFrame(
+        {
+            "date": pd.to_datetime(["2025-12-23", "2025-12-29"]),
+            "category": ["Festgeld", "Festgeld"],
+            "isin": ["ZF0102", "ZF0101"],
+            "account": ["WeltSparen Festgeld", "WeltSparen Festgeld"],
+            "interest": [79.49, 118.33],
+        }
+    )
+    result = build_earnings(dividends, two_deposits)
+    names = result.drop_duplicates("holding").set_index("holding")["name"]
+    assert names["ZF0101"] == "WeltSparen Festgeld (ZF0101)"
+    assert names["ZF0102"] == "WeltSparen Festgeld (ZF0102)"
+    # a name used by one holding only stays as it is
+    assert names["Coca Cola"] == "Coca Cola"

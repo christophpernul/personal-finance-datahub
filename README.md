@@ -268,7 +268,8 @@ workbooks) and every interest payment (`Zinsen` sheet), one row per payment: `da
 (`dividend` / `interest`), `category` (`ETF`, `Aktie` for a stock without ISIN, `Tagesgeld`,
 `Festgeld`), `holding` (ISIN, stock name or your interest account code), its display `name` and the
 `amount`. An interest account is named after its `Anbieter` and kind, e.g. *DKB Tagesgeld*
-(`traderepublic` → *Trade Republic*, `weltsparen` → *WeltSparen*; others are capitalised). The
+(`traderepublic` → *Trade Republic*, `weltsparen` → *WeltSparen*; others are capitalised); when
+several accounts or securities share a name, their id is added, e.g. *WeltSparen Festgeld (ZF0102)*. The
 dashboard's Earnings tab sums them per year and holding.
 
 ### Returns per year (XIRR)
