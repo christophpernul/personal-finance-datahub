@@ -102,6 +102,10 @@ PATH_STOCKS_PORTFOLIO_VALUE = TRANSFORM_DIR / "transform_stocks__portfolio_value
 
 # Combined ETF + individual-stock portfolio value with a `security_type` column
 PATH_PORTFOLIO_VALUE_COMBINED = TRANSFORM_DIR / "transform_portfolio__value.csv"
+# Every received dividend (ETFs, stocks) and interest payment (Tagesgeld,
+# Festgeld), one row per payment, columns [date, kind, category, holding, name,
+# amount]; the dashboard sums them per year and holding.
+PATH_PORTFOLIO_EARNINGS = TRANSFORM_DIR / "transform_portfolio__earnings.csv"
 # Every dated ETF/stock cashflow (trades, dividends) plus the current value of
 # each held position, for money-weighted (XIRR) returns
 PATH_PORTFOLIO_CASHFLOWS = TRANSFORM_DIR / "transform_portfolio__cashflows.csv"

@@ -112,7 +112,7 @@ decimal comma unless noted otherwise.
 | `Sells` | `index`, `date`, `type`, `price`, `amount`, `cost`, `depot`, `shares`, `name`, `isin`, `_checkSharesEqualAmountDivPrice` | one row per sell; `amount` = proceeds (positive), `shares` = shares sold |
 | `Rebalancing` | same as `Sells` | buys (negative `amount`) and sells (positive `amount`, `shares`) done only to rebalance; only their monthly net counts as cashflow |
 | `Dividends` | `Datum`, `Betrag`, `Name`, `ISIN` (+ more, ignored) | one row per distribution received |
-| `Zinsen` | `Datum`, `Betrag`, `ISIN` (+ more, ignored) | one row per interest payment received; `ISIN` is your own account code: `ZT…` = Tagesgeld, `ZF…` = Festgeld (any other prefix stops the run) |
+| `Zinsen` | `Datum`, `Betrag`, `ISIN`, `Anbieter` (+ more, ignored) | one row per interest payment received; `ISIN` is your own account code: `ZT…` = Tagesgeld, `ZF…` = Festgeld (any other prefix stops the run) |
 | `Riester Buy` | `Datum`, `Art`, `Betrag` | one row per Riester contribution (`Riester Monatsbeitrag` or `Riester Einmalzahlung`) |
 
 `depot` is the broker id (`traderepublic`, `comdirect`, …).
@@ -192,7 +192,7 @@ holds balances, rates and terms.
 | Stage | Reads | Writes |
 | --- | --- | --- |
 | cashflow | Toshl exports, `toshl_exclusion` manual transactions | `transform_cashflow__*` (single and monthly toshl incomes/expenses, the bookings set aside) |
-| stocks | trade sheets, mergers, splits, master data, Riester files, Yahoo prices | `transform_etf__*` (incl. `transform_etf__savings_plan.csv`), `transform_stocks__*`, `transform_portfolio__value.csv`, `transform_portfolio__cashflows.csv` |
+| stocks | trade sheets, mergers, splits, master data, Riester files, Yahoo prices | `transform_etf__*` (incl. `transform_etf__savings_plan.csv`), `transform_stocks__*`, `transform_portfolio__value.csv`, `transform_portfolio__cashflows.csv`, `transform_portfolio__earnings.csv` |
 | crypto | exchange exports, crypto manual transactions, crypto master data, Yahoo prices | `transform_crypto__*` (ledger, trades, holdings, coins, portfolio value) |
 | cash | cash balance sheet | `transform_cash__*` (monthly balances, fixed-term deposits, liquidity) |
 | target | the stages above, `toshl_tag_categorization.json`, investment costs | `target_cashflow__*` (all incomes/expenses single and monthly), `target_portfolio__sold_*` |
@@ -260,6 +260,16 @@ price):
   of `source_etf__master_data.csv` (without that row the contract is unclassified).
 - **No TER**: `ter` is empty and `ter_cost_to_date` 0; the contract's costs are only the fees of
   the Raisin export (`total_cost`).
+
+### Earnings (dividends and interest)
+
+`transform_portfolio__earnings.csv` lists every dividend (`Dividends` sheets of both trade
+workbooks) and every interest payment (`Zinsen` sheet), one row per payment: `date`, `kind`
+(`dividend` / `interest`), `category` (`ETF`, `Aktie` for a stock without ISIN, `Tagesgeld`,
+`Festgeld`), `holding` (ISIN, stock name or your interest account code), its display `name` and the
+`amount`. An interest account is named after its `Anbieter` and kind, e.g. *DKB Tagesgeld*
+(`traderepublic` → *Trade Republic*, `weltsparen` → *WeltSparen*; others are capitalised). The
+dashboard's Earnings tab sums them per year and holding.
 
 ### Returns per year (XIRR)
 

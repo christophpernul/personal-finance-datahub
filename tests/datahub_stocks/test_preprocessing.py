@@ -265,11 +265,31 @@ def interest_raw():
 @pytest.mark.ut
 def test_preprocess_interest_renames_and_categorizes(interest_raw):
     result = preprocess_interest(interest_raw)
-    assert result.columns.tolist() == ["date", "category", "interest"]
+    assert result.columns.tolist() == [
+        "date",
+        "category",
+        "isin",
+        "account",
+        "interest",
+    ]
     assert pd.api.types.is_datetime64_any_dtype(result["date"])
     # ISIN prefix maps to the deposit kind
     assert result["category"].tolist() == ["Tagesgeld", "Tagesgeld", "Festgeld"]
+    # the account is named by its provider and deposit kind
+    assert result["account"].tolist() == [
+        "Trade Republic Tagesgeld",
+        "WeltSparen Tagesgeld",
+        "WeltSparen Festgeld",
+    ]
     assert result["interest"].sum() == pytest.approx(86.25)
+
+
+@pytest.mark.ut
+def test_preprocess_interest_capitalises_unknown_provider(interest_raw):
+    raw = interest_raw.copy()
+    raw.loc[0, "Anbieter"] = "consorsbank"
+    result = preprocess_interest(raw)
+    assert result.loc[0, "account"] == "Consorsbank Tagesgeld"
 
 
 @pytest.mark.ut
