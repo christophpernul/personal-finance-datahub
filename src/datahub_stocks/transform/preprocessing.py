@@ -501,6 +501,58 @@ def apply_mergers(portfolio: pd.DataFrame, mergers: pd.DataFrame) -> pd.DataFram
     return result
 
 
+SAVINGS_PLAN_COLUMNS = [
+    "index",
+    "date",
+    "isin",
+    "name",
+    "depot",
+    "amount",
+    "cost",
+    "shares",
+    "price",
+    "ter",
+    "region",
+    "distribution",
+    "replication",
+    "etf_type",
+]
+
+
+def latest_savings_plan(buys: pd.DataFrame, master_data: pd.DataFrame) -> pd.DataFrame:
+    """The latest savings plan execution: every buy with the highest ``index``
+    of the Buys sheet (one execution of the monthly plan, its buys can fall on
+    different days), one row per ETF.
+
+    ``amount`` is the money invested (positive), ``cost`` the order fees,
+    ``price`` = amount / shares; ``name`` and the classification (``ter``,
+    ``region``, ``distribution``, ``replication``, ``etf_type``) come from
+    the master data (the trade's name if the ISIN has no master row).
+    Expects the output of :func:`preprocess_buys`."""
+    if buys.empty:
+        return pd.DataFrame(columns=SAVINGS_PLAN_COLUMNS)
+    latest = buys[buys["index"] == buys["index"].max()]
+    plan = latest.groupby("isin", as_index=False).agg(
+        index=("index", "first"),
+        date=("date", "max"),
+        trade_name=("name", "first"),
+        depot=("depot", lambda s: ", ".join(sorted(set(s.dropna())))),
+        amount=("total_investment", "sum"),
+        cost=("cost", "sum"),
+        shares=("shares", "sum"),
+    )
+    plan["price"] = plan["amount"] / plan["shares"]
+    master = master_data.drop_duplicates("isin").reindex(
+        columns=["isin", "name", *POSITION_ATTRIBUTE_COLUMNS]
+    )
+    master["ter"] = pd.to_numeric(master["ter"], errors="coerce")
+    plan = plan.merge(master, on="isin", how="left")
+    plan["name"] = plan["name"].fillna(plan["trade_name"])
+    return plan.sort_values("amount", ascending=False).reset_index(drop=True)[
+        SAVINGS_PLAN_COLUMNS
+    ]
+
+
 def aggregate_monthly_shares(portfolio: pd.DataFrame) -> pd.DataFrame:
     """Aggregates shares per ISIN by month and computes cumulative holdings over time."""
     portfolio = portfolio.copy()

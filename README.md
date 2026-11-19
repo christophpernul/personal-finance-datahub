@@ -192,7 +192,7 @@ holds balances, rates and terms.
 | Stage | Reads | Writes |
 | --- | --- | --- |
 | cashflow | Toshl exports, `toshl_exclusion` manual transactions | `transform_cashflow__*` (single and monthly toshl incomes/expenses, the bookings set aside) |
-| stocks | trade sheets, mergers, splits, master data, Riester files, Yahoo prices | `transform_etf__*`, `transform_stocks__*`, `transform_portfolio__value.csv`, `transform_portfolio__cashflows.csv` |
+| stocks | trade sheets, mergers, splits, master data, Riester files, Yahoo prices | `transform_etf__*` (incl. `transform_etf__savings_plan.csv`), `transform_stocks__*`, `transform_portfolio__value.csv`, `transform_portfolio__cashflows.csv` |
 | crypto | exchange exports, crypto manual transactions, crypto master data, Yahoo prices | `transform_crypto__*` (ledger, trades, holdings, coins, portfolio value) |
 | cash | cash balance sheet | `transform_cash__*` (monthly balances, fixed-term deposits, liquidity) |
 | target | the stages above, `toshl_tag_categorization.json`, investment costs | `target_cashflow__*` (all incomes/expenses single and monthly), `target_portfolio__sold_*` |
@@ -238,6 +238,13 @@ transactions, so both always agree.
   takes it out of its assets day by day. For every month a position was held: shares at month
   end × that month's closing price (`source_etf__price_historic.csv`; a month without a price
   uses the closest one) × TER / 12, summed up. Positions without TER: 0.
+
+### Latest savings plan execution
+
+`transform_etf__savings_plan.csv`: every buy of the `Buys` sheet with the highest `index` (the
+latest execution of the monthly plan), one row per ETF: `amount` invested, order `cost`,
+`shares`, `price` = amount / shares, and `name`, `ter`, `region`, `distribution`, `replication`,
+`etf_type` from the master data (the trade's name if the ISIN has none).
 
 ### Riester contract
 
