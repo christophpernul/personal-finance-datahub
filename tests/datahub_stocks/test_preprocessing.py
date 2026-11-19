@@ -20,6 +20,7 @@ from src.datahub_stocks.transform.preprocessing import (
     current_depots,
     calculate_portfolio_value,
     calculate_ter_costs,
+    latest_savings_plan,
 )
 
 
@@ -713,3 +714,42 @@ def test_calculate_portfolio_value_passes_attributes_and_ter_costs():
     assert pd.isna(result.loc["B", "replication"])
     assert result.loc["A", "ter_cost_to_date"] == 0.5
     assert result.loc["B", "ter_cost_to_date"] == 0.0
+
+
+@pytest.mark.ut
+def test_latest_savings_plan_takes_the_highest_index():
+    buys = pd.DataFrame(
+        {
+            "index": [1, 2, 2, 2],
+            "date": pd.to_datetime(
+                ["2026-10-02", "2026-11-02", "2026-11-06", "2026-11-06"]
+            ),
+            "isin": ["A", "A", "B", "C"],
+            "name": ["Fund A", "Fund A", "Fund B (trade)", "Fund C"],
+            "depot": ["traderepublic"] * 4,
+            "total_investment": [100.0, 160.0, 30.0, 75.0],
+            "cost": [0.0, 0.0, 1.0, 0.0],
+            "shares": [1.0, 2.0, 3.0, 1.5],
+        }
+    )
+    master = pd.DataFrame(
+        {
+            "isin": ["A", "B"],
+            "name": ["Fund A master", "Fund B master"],
+            "ter": [0.07, 0.19],
+            "region": ["usa", "commodities"],
+            "distribution": ["accumulating", "accumulating"],
+            "replication": ["physical", "synthetic"],
+            "etf_type": ["index", "commodity"],
+        }
+    )
+    plan = latest_savings_plan(buys, master)
+    assert plan["isin"].tolist() == ["A", "C", "B"]  # largest amount first
+    a = plan.set_index("isin").loc["A"]
+    assert a["amount"] == 160.0 and a["price"] == 80.0
+    assert a["name"] == "Fund A master" and a["region"] == "usa"
+    assert a["date"] == pd.Timestamp("2026-11-02")
+    c = plan.set_index("isin").loc["C"]
+    assert c["name"] == "Fund C"  # no master row: the trade's name
+    assert pd.isna(c["region"])
+    assert (plan["index"] == 2).all()
