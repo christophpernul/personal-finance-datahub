@@ -89,3 +89,39 @@ def test_build_earnings_keeps_accounts_with_the_same_name_apart(dividends, inter
     assert names["ZF0102"] == "WeltSparen Festgeld (ZF0102)"
     # a name used by one holding only stays as it is
     assert names["Coca Cola"] == "Coca Cola"
+
+
+@pytest.fixture
+def deposits():
+    # as from preprocess_term_deposits (only the columns used here)
+    return pd.DataFrame(
+        {
+            "deposit_id": ["hoistspar_2023-12", "creditplus_2024-12"],
+            "name": ["HoistSpar Festgeld 3 Jahre", "Creditplus Festgeld 3 Jahre"],
+        }
+    )
+
+
+@pytest.mark.ut
+def test_build_earnings_names_interest_after_its_deposit(dividends, interest, deposits):
+    linked = interest.assign(isin=["ZT0002", "ZF_hoistspar_2023-12"])
+    result = build_earnings(dividends, linked, deposits)
+    names = result.drop_duplicates("holding").set_index("holding")["name"]
+    # a code ZF_<Vertrags-ID> belongs to the deposit, with its balance-sheet name
+    assert names["hoistspar_2023-12"] == "HoistSpar Festgeld 3 Jahre"
+    # any other code keeps its interest account
+    assert names["ZT0002"] == "DKB Tagesgeld"
+
+
+@pytest.mark.ut
+def test_build_earnings_keeps_plain_festgeld_codes(dividends, interest, deposits):
+    result = build_earnings(dividends, interest, deposits)
+    names = result.drop_duplicates("holding").set_index("holding")["name"]
+    assert names["ZF0101"] == "WeltSparen Festgeld"
+
+
+@pytest.mark.ut
+def test_build_earnings_rejects_an_unknown_deposit(dividends, interest, deposits):
+    linked = interest.assign(isin=["ZT0002", "ZF_typo_2023"])
+    with pytest.raises(AssertionError, match="typo_2023"):
+        build_earnings(dividends, linked, deposits)

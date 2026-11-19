@@ -8,8 +8,10 @@ can sum them per year and break each year down by holding:
 - ``kind``: ``dividend`` or ``interest``
 - ``category``: ``ETF`` / ``Aktie`` for dividends (an individual stock carries
   no ISIN), ``Tagesgeld`` / ``Festgeld`` for interest
-- ``holding``: the ISIN of an ETF, the name of a stock or the account id of an
-  interest account; ``name`` is its display name
+- ``holding``: the ISIN of an ETF, the name of a stock, the `Vertrags-ID` of
+  the fixed-term deposit that paid the interest (when its code in ``Zinsen`` is
+  ``ZF_<Vertrags-ID>``) or else the code of the interest account; ``name`` is
+  its display name, for a deposit its name in the cash balance sheet
 - ``amount``: the positive amount received
 """
 
@@ -20,6 +22,9 @@ KIND_DIVIDEND = "dividend"
 KIND_INTEREST = "interest"
 CATEGORY_ETF = "ETF"
 CATEGORY_STOCK = "Aktie"
+# An interest code (``ISIN`` of the Zinsen sheet) of this prefix plus a
+# `Vertrags-ID` of the Festgeld sheet links the payment to that deposit.
+DEPOSIT_CODE_PREFIX = "ZF_"
 
 
 def _latest_name(names: pd.Series, holdings: pd.Series, dates: pd.Series) -> pd.Series:
@@ -39,13 +44,47 @@ def _unique_names(names: pd.Series, holdings: pd.Series) -> pd.Series:
     return names.where(~clash, names + " (" + holdings + ")")
 
 
-def build_earnings(dividends: pd.DataFrame, interest: pd.DataFrame) -> pd.DataFrame:
+def _interest_holdings(
+    interest: pd.DataFrame, deposits: pd.DataFrame | None
+) -> tuple[pd.Series, pd.Series]:
+    """Holding id and name per interest payment: the fixed-term deposit when
+    its code is ``ZF_<Vertrags-ID>``, else the interest account."""
+    holding = interest["isin"].astype(str)
+    name = interest["account"]
+    linked = holding.str.startswith(DEPOSIT_CODE_PREFIX)
+    if not linked.any():
+        return holding, name
+    deposit_id = holding.str[len(DEPOSIT_CODE_PREFIX) :]
+    known = (
+        deposits.set_index("deposit_id")["name"].fillna("")
+        if deposits is not None
+        else pd.Series(dtype=str)
+    )
+    unknown = sorted(set(deposit_id[linked]) - set(known.index))
+    assert not unknown, (
+        f"Interest codes `{DEPOSIT_CODE_PREFIX}<Vertrags-ID>` in the Zinsen sheet "
+        f"whose `Vertrags-ID` is not in the Festgeld sheet of the cash balance "
+        f"sheet: {unknown}"
+    )
+    deposit_name = deposit_id.map(known)
+    deposit_name = deposit_name.where(deposit_name != "", deposit_id)
+    return holding.where(~linked, deposit_id), name.where(~linked, deposit_name)
+
+
+def build_earnings(
+    dividends: pd.DataFrame,
+    interest: pd.DataFrame,
+    deposits: pd.DataFrame | None = None,
+) -> pd.DataFrame:
     """Combine received dividends and interest into one table of payments.
 
     ``dividends``: [date, isin, name, dividend] as from ``preprocess_dividends``
     (``isin`` is empty for individual stocks).
     ``interest``: [date, category, isin, account, interest] as from
     ``preprocess_interest``.
+    ``deposits``: the fixed-term deposits as from ``preprocess_term_deposits``
+    ([deposit_id, name, ...]); needed when an interest code names a deposit
+    (``ZF_<Vertrags-ID>``).
 
     Returns ``EARNINGS_COLUMNS`` sorted by date, without zero or missing amounts.
     """
@@ -62,15 +101,14 @@ def build_earnings(dividends: pd.DataFrame, interest: pd.DataFrame) -> pd.DataFr
             "amount": pd.to_numeric(dividends["dividend"], errors="coerce"),
         }
     )
+    int_holding, int_name = _interest_holdings(interest, deposits)
     intr = pd.DataFrame(
         {
             "date": pd.to_datetime(interest["date"]),
             "kind": KIND_INTEREST,
             "category": interest["category"],
-            "holding": interest["isin"],
-            "name": _latest_name(
-                interest["account"], interest["isin"], interest["date"]
-            ),
+            "holding": int_holding,
+            "name": _latest_name(int_name, int_holding, interest["date"]),
             "amount": pd.to_numeric(interest["interest"], errors="coerce"),
         }
     )
