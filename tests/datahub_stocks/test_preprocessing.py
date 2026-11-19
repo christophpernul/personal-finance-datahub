@@ -90,7 +90,7 @@ def test_apply_mergers_no_matching_isin(portfolio):
 def test_aggregate_monthly_shares_cumulates():
     portfolio = pd.DataFrame(
         {
-            "Datum": pd.to_datetime(["2024-01-15", "2024-01-20", "2024-03-10"]),
+            "date": pd.to_datetime(["2024-01-15", "2024-01-20", "2024-03-10"]),
             "isin": ["A", "A", "A"],
             "shares": [10.0, 5.0, 3.0],
         }
@@ -106,7 +106,7 @@ def test_aggregate_monthly_shares_cumulates():
 def test_aggregate_monthly_shares_fills_gaps():
     portfolio = pd.DataFrame(
         {
-            "Datum": pd.to_datetime(["2024-01-15", "2024-03-10"]),
+            "date": pd.to_datetime(["2024-01-15", "2024-03-10"]),
             "isin": ["A", "A"],
             "shares": [10.0, 5.0],
         }
