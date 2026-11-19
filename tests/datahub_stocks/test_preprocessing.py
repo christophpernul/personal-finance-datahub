@@ -285,6 +285,15 @@ def test_preprocess_interest_renames_and_categorizes(interest_raw):
 
 
 @pytest.mark.ut
+def test_preprocess_interest_subtracts_the_tax_withheld(interest_raw):
+    raw = interest_raw.copy()
+    raw["Steuer"] = [None, None, 20.96]
+    result = preprocess_interest(raw)
+    # an empty cell means the amount is already after tax
+    assert result["interest"].tolist() == pytest.approx([3.19, 2.66, 59.44])
+
+
+@pytest.mark.ut
 def test_preprocess_interest_capitalises_unknown_provider(interest_raw):
     raw = interest_raw.copy()
     raw.loc[0, "Anbieter"] = "consorsbank"
