@@ -56,6 +56,7 @@ INTEREST_REQUIRED_COLUMNS = {
     "Datum",
     "Betrag",
     "ISIN",
+    "Anbieter",
 }
 RIESTER_REQUIRED_COLUMNS = {
     "Datum",
@@ -68,6 +69,19 @@ RIESTER_REQUIRED_COLUMNS = {
 INTEREST_ISIN_PREFIX_CATEGORY = {
     "ZT": "Tagesgeld",
     "ZF": "Festgeld",
+}
+# Optional column of the ``Zinsen`` sheet: tax withheld from an interest
+# payment entered before tax (Abgeltungsteuer + Soli + Kirchensteuer), a
+# positive amount; it is subtracted so every payment counts after tax, like
+# those entered after tax already (empty or missing column: nothing withheld).
+INTEREST_TAX_COLUMN = "Steuer"
+# Display names of the interest providers (``Anbieter``, matched lowercase); an
+# unknown provider is shown capitalised. Together with the deposit kind they
+# name the account, e.g. ``DKB Tagesgeld``.
+INTEREST_PROVIDER_LABELS = {
+    "traderepublic": "Trade Republic",
+    "weltsparen": "WeltSparen",
+    "dkb": "DKB",
 }
 STOCK_TRADES_REQUIRED_COLUMNS = {
     "Datum",
@@ -353,23 +367,31 @@ def preprocess_interest(data: pd.DataFrame) -> pd.DataFrame:
     ``ZT`` accounts are instant-access deposits (``Tagesgeld``, e.g. the trade
     republic cash interest and the weltsparen / DKB Tagesgeld accounts) and
     ``ZF`` accounts are fixed-term deposits (``Festgeld``). The relevant columns
-    are reduced to [date, category, interest], where `category` is
-    ``Tagesgeld``/``Festgeld`` and `interest` (``Betrag``) is the positive amount
-    received.
+    are reduced to [date, category, isin, account, interest], where `category`
+    is ``Tagesgeld``/``Festgeld``, `isin` the account id, `account` its display
+    name (provider and deposit kind, e.g. ``DKB Tagesgeld``) and `interest`
+    the amount received after tax: ``Betrag`` minus the optional ``Steuer``
+    (see ``INTEREST_TAX_COLUMN``).
     """
     _validate_columns(data, INTEREST_REQUIRED_COLUMNS, "interest")
+    tax = (
+        pd.to_numeric(data[INTEREST_TAX_COLUMN], errors="coerce").fillna(0.0)
+        if INTEREST_TAX_COLUMN in data.columns
+        else 0.0
+    )
     data = data.rename(
         columns={
             "Datum": "date",
             "Betrag": "interest",
             "ISIN": "isin",
+            "Anbieter": "provider",
         }
-    )[["date", "isin", "interest"]]
+    )[["date", "isin", "provider", "interest"]]
 
     if not pd.api.types.is_datetime64_any_dtype(data["date"]):
         data = convert_columns_to_timestamp(data, column_formats={"date": "%d.%m.%Y"})
 
-    data["interest"] = pd.to_numeric(data["interest"], errors="coerce")
+    data["interest"] = pd.to_numeric(data["interest"], errors="coerce") - tax
     data = strip_vals(data, ["isin"])
     data["category"] = data["isin"].str[:2].map(INTEREST_ISIN_PREFIX_CATEGORY)
     unmapped = sorted(data.loc[data["category"].isna(), "isin"].unique())
@@ -377,7 +399,15 @@ def preprocess_interest(data: pd.DataFrame) -> pd.DataFrame:
         f"Interest rows with an unknown account ISIN prefix (expected one of "
         f"{sorted(INTEREST_ISIN_PREFIX_CATEGORY)}): {unmapped}"
     )
-    return data[["date", "category", "interest"]]
+    provider = data["provider"].fillna("").astype(str).str.strip()
+    data["account"] = (
+        provider.str.lower()
+        .map(INTEREST_PROVIDER_LABELS)
+        .fillna(provider.str.capitalize())
+        + " "
+        + data["category"]
+    ).str.strip()
+    return data[["date", "category", "isin", "account", "interest"]]
 
 
 def aggregate_monthly_interest(interest: pd.DataFrame) -> pd.DataFrame:

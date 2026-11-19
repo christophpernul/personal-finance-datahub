@@ -90,7 +90,7 @@ def test_apply_mergers_no_matching_isin(portfolio):
 def test_aggregate_monthly_shares_cumulates():
     portfolio = pd.DataFrame(
         {
-            "Datum": pd.to_datetime(["2024-01-15", "2024-01-20", "2024-03-10"]),
+            "date": pd.to_datetime(["2024-01-15", "2024-01-20", "2024-03-10"]),
             "isin": ["A", "A", "A"],
             "shares": [10.0, 5.0, 3.0],
         }
@@ -106,7 +106,7 @@ def test_aggregate_monthly_shares_cumulates():
 def test_aggregate_monthly_shares_fills_gaps():
     portfolio = pd.DataFrame(
         {
-            "Datum": pd.to_datetime(["2024-01-15", "2024-03-10"]),
+            "date": pd.to_datetime(["2024-01-15", "2024-03-10"]),
             "isin": ["A", "A"],
             "shares": [10.0, 5.0],
         }
@@ -265,11 +265,40 @@ def interest_raw():
 @pytest.mark.ut
 def test_preprocess_interest_renames_and_categorizes(interest_raw):
     result = preprocess_interest(interest_raw)
-    assert result.columns.tolist() == ["date", "category", "interest"]
+    assert result.columns.tolist() == [
+        "date",
+        "category",
+        "isin",
+        "account",
+        "interest",
+    ]
     assert pd.api.types.is_datetime64_any_dtype(result["date"])
     # ISIN prefix maps to the deposit kind
     assert result["category"].tolist() == ["Tagesgeld", "Tagesgeld", "Festgeld"]
+    # the account is named by its provider and deposit kind
+    assert result["account"].tolist() == [
+        "Trade Republic Tagesgeld",
+        "WeltSparen Tagesgeld",
+        "WeltSparen Festgeld",
+    ]
     assert result["interest"].sum() == pytest.approx(86.25)
+
+
+@pytest.mark.ut
+def test_preprocess_interest_subtracts_the_tax_withheld(interest_raw):
+    raw = interest_raw.copy()
+    raw["Steuer"] = [None, None, 20.96]
+    result = preprocess_interest(raw)
+    # an empty cell means the amount is already after tax
+    assert result["interest"].tolist() == pytest.approx([3.19, 2.66, 59.44])
+
+
+@pytest.mark.ut
+def test_preprocess_interest_capitalises_unknown_provider(interest_raw):
+    raw = interest_raw.copy()
+    raw.loc[0, "Anbieter"] = "consorsbank"
+    result = preprocess_interest(raw)
+    assert result.loc[0, "account"] == "Consorsbank Tagesgeld"
 
 
 @pytest.mark.ut

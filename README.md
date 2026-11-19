@@ -112,7 +112,7 @@ decimal comma unless noted otherwise.
 | `Sells` | `index`, `date`, `type`, `price`, `amount`, `cost`, `depot`, `shares`, `name`, `isin`, `_checkSharesEqualAmountDivPrice` | one row per sell; `amount` = proceeds (positive), `shares` = shares sold |
 | `Rebalancing` | same as `Sells` | buys (negative `amount`) and sells (positive `amount`, `shares`) done only to rebalance; only their monthly net counts as cashflow |
 | `Dividends` | `Datum`, `Betrag`, `Name`, `ISIN` (+ more, ignored) | one row per distribution received |
-| `Zinsen` | `Datum`, `Betrag`, `ISIN` (+ more, ignored) | one row per interest payment received; `ISIN` is your own account code: `ZT…` = Tagesgeld, `ZF…` = Festgeld (any other prefix stops the run) |
+| `Zinsen` | `Datum`, `Betrag`, `ISIN`, `Anbieter`, optional `Steuer` (+ more, ignored) | one row per interest payment received, after tax. If you enter a `Betrag` before tax (e.g. from a Raisin statement), put the tax withheld (Abgeltungsteuer + Soli + Kirchensteuer) in `Steuer`: it is subtracted. Empty = already after tax; `ISIN` is your own account code: `ZT…` = Tagesgeld, `ZF…` = Festgeld (any other prefix stops the run). `ZF_<Vertrags-ID>` links Festgeld interest to that deposit of the `Festgeld` sheet (cash balance sheet), so the earnings show e.g. *HoistSpar Festgeld 3 Jahre* (a `Vertrags-ID` missing there stops the run) |
 | `Riester Buy` | `Datum`, `Art`, `Betrag` | one row per Riester contribution (`Riester Monatsbeitrag` or `Riester Einmalzahlung`) |
 
 `depot` is the broker id (`traderepublic`, `comdirect`, …).
@@ -192,7 +192,7 @@ holds balances, rates and terms.
 | Stage | Reads | Writes |
 | --- | --- | --- |
 | cashflow | Toshl exports, `toshl_exclusion` manual transactions | `transform_cashflow__*` (single and monthly toshl incomes/expenses, the bookings set aside) |
-| stocks | trade sheets, mergers, splits, master data, Riester files, Yahoo prices | `transform_etf__*` (incl. `transform_etf__savings_plan.csv`), `transform_stocks__*`, `transform_portfolio__value.csv`, `transform_portfolio__cashflows.csv` |
+| stocks | trade sheets, mergers, splits, master data, Riester files, Yahoo prices | `transform_etf__*` (incl. `transform_etf__savings_plan.csv`), `transform_stocks__*`, `transform_portfolio__value.csv`, `transform_portfolio__cashflows.csv`, `transform_portfolio__earnings.csv` |
 | crypto | exchange exports, crypto manual transactions, crypto master data, Yahoo prices | `transform_crypto__*` (ledger, trades, holdings, coins, portfolio value) |
 | cash | cash balance sheet | `transform_cash__*` (monthly balances, fixed-term deposits, liquidity) |
 | target | the stages above, `toshl_tag_categorization.json`, investment costs | `target_cashflow__*` (all incomes/expenses single and monthly), `target_portfolio__sold_*` |
@@ -217,7 +217,7 @@ transactions, so both always agree.
 | `order_costs` | the same trades | −order fee of each trade |
 | `Investment` (rebalancing) | `Rebalancing` sheet | one row per month: sell proceeds − buy amounts − fees |
 | `Dividends` | `Dividends` sheets | each distribution received |
-| `Tagesgeld` / `Festgeld` | `Zinsen` sheet | each interest payment received |
+| `Tagesgeld` / `Festgeld` | `Zinsen` sheet | each interest payment received, after tax (`Betrag` − `Steuer`; the tax is not booked as an expense) |
 | `Riester` | `Riester Buy` sheet | −each contribution |
 | `Investment Costs` | `comdirect_costs_combined.csv` | −each cost (a credit becomes positive) |
 | `Crypto` | crypto exchange exports | −EUR deposited to an exchange, +EUR withdrawn to the bank |
@@ -260,6 +260,17 @@ price):
   of `source_etf__master_data.csv` (without that row the contract is unclassified).
 - **No TER**: `ter` is empty and `ter_cost_to_date` 0; the contract's costs are only the fees of
   the Raisin export (`total_cost`).
+
+### Earnings (dividends and interest)
+
+`transform_portfolio__earnings.csv` lists every dividend (`Dividends` sheets of both trade
+workbooks) and every interest payment (`Zinsen` sheet), one row per payment: `date`, `kind`
+(`dividend` / `interest`), `category` (`ETF`, `Aktie` for a stock without ISIN, `Tagesgeld`,
+`Festgeld`), `holding` (ISIN, stock name or your interest account code), its display `name` and the
+`amount` (interest after tax, see `Zinsen`). An interest account is named after its `Anbieter` and kind, e.g. *DKB Tagesgeld*
+(`traderepublic` → *Trade Republic*, `weltsparen` → *WeltSparen*; others are capitalised); when
+several accounts or securities share a name, their id is added, e.g. *WeltSparen Festgeld (ZF0102)*. The
+dashboard's Earnings tab sums them per year and holding.
 
 ### Returns per year (XIRR)
 

@@ -35,6 +35,8 @@ from datahub_stocks.transform.riester import (
     calculate_riester_value,
     build_riester_cashflows,
 )
+from datahub_stocks.transform.earnings import build_earnings
+from datahub_cash.transform.balance_sheet import preprocess_term_deposits
 from datahub_stocks.extract.extract_master_data import (
     extract_current_etf_prices,
     extract_historic_etf_prices,
@@ -63,6 +65,9 @@ from constants import (
     PATH_STOCKS_PORTFOLIO_VALUE,
     PATH_PORTFOLIO_VALUE_COMBINED,
     PATH_PORTFOLIO_CASHFLOWS,
+    PATH_PORTFOLIO_EARNINGS,
+    PATH_CASH_BALANCE_SHEET,
+    CASH_SHEET_TERM_DEPOSITS,
     PATH_RIESTER_FEES,
     PATH_RIESTER_VALUE,
     RIESTER_VALUE_SHEET,
@@ -273,6 +278,22 @@ def run_stocks():
     monthly_interest = aggregate_monthly_interest(interest)
     save_data(monthly_interest, PATH_MONTHLY_INTEREST)
     logger.info("Monthly interest per category computed and saved!")
+
+    # Every received dividend and interest payment with its holding / account,
+    # for the yearly earnings per holding in the dashboard
+    # Fixed-term deposits of the cash balance sheet name the Festgeld interest
+    # whose code is `ZF_<Vertrags-ID>`
+    term_deposits = preprocess_term_deposits(
+        load_data(
+            PATH_CASH_BALANCE_SHEET,
+            file_type="excel",
+            sheet_name=CASH_SHEET_TERM_DEPOSITS,
+        )
+    )
+    save_data(
+        build_earnings(dividends, interest, term_deposits), PATH_PORTFOLIO_EARNINGS
+    )
+    logger.info(f"Earnings (dividends and interest) saved in {PATH_PORTFOLIO_EARNINGS}")
 
     # Monthly Riester pension contributions (booked as an expense downstream)
     monthly_riester = aggregate_monthly_riester(riester)
