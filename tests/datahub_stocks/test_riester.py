@@ -119,3 +119,36 @@ def test_build_riester_cashflows(contributions, values):
     assert flows["amount"].sum() == pytest.approx(2500.0 - 1932.9)
     assert flows["date"].iloc[-1] == "2026-11-13"
     assert (flows["isin"] == RIESTER_ID).all()
+
+
+@pytest.mark.ut
+def test_calculate_riester_value_classifies_by_master_data(contributions, values):
+    fees = preprocess_riester_fees(_fee_export())
+    master = pd.DataFrame(
+        {
+            "isin": ["IE1", RIESTER_ID],
+            "ter": [0.2, 0.9],
+            "region": ["usa", "world"],
+            "distribution": ["distributing", "accumulating"],
+            "replication": ["physical", "physical"],
+            "etf_type": ["value", "index"],
+        }
+    )
+    row = calculate_riester_value(contributions, fees, values, master).iloc[0]
+    assert row["region"] == "world"
+    assert row["distribution"] == "accumulating"
+    assert row["etf_type"] == "index"
+    # no TER, even if the master row has one: its costs are the fees
+    assert pd.isna(row["ter"])
+    assert row["total_cost"] == pytest.approx(27.90)
+    assert row["ter_cost_to_date"] == 0.0
+
+
+@pytest.mark.ut
+def test_calculate_riester_value_without_master_row_is_unclassified(
+    contributions, values
+):
+    fees = preprocess_riester_fees(_fee_export())
+    row = calculate_riester_value(contributions, fees, values).iloc[0]
+    assert pd.isna(row["region"])
+    assert pd.isna(row["ter"])

@@ -694,14 +694,80 @@ def current_depots(portfolio: pd.DataFrame) -> pd.DataFrame:
     return held.groupby("isin", as_index=False)["depot"].agg(", ".join)
 
 
+# Master-data attributes passed on per position: the TER (% p.a.) and how the
+# fund is classified (region, accumulating / distributing, physical / synthetic
+# replication, ETF type). Missing in a master table (e.g. individual stocks
+# have no replication) -> left empty.
+POSITION_ATTRIBUTE_COLUMNS = [
+    "ter",
+    "region",
+    "distribution",
+    "replication",
+    "etf_type",
+]
+
+
+def _to_month(dates: pd.Series) -> pd.Series:
+    """Calendar month of (possibly timezone-aware) timestamps, as Period[M].
+
+    Monthly Yahoo prices are labelled with the first day of the month in the
+    exchange's timezone, so they are read in local time, not UTC."""
+    stamps = pd.to_datetime(dates, utc=True).dt.tz_convert("Europe/Berlin")
+    return stamps.dt.tz_localize(None).dt.to_period("M")
+
+
+def calculate_ter_costs(
+    shares: pd.DataFrame,
+    historic_prices: pd.DataFrame,
+    current_prices: pd.DataFrame,
+    master_data: pd.DataFrame,
+) -> pd.DataFrame:
+    """Estimated ongoing costs (TER) each position has cost so far.
+
+    The TER is not charged as a booking but taken out of the fund's assets day
+    by day, so it is estimated: for every month a position was held, the value
+    at the end of that month (cumulative shares x monthly closing price) times
+    TER / 12. Months without a historic price use the closest known one (or the
+    current price if there is no history at all). Positions without a TER cost
+    nothing. Returns [isin, ter_cost_to_date]."""
+    held = shares[["date", "isin", "cumulative_shares"]].copy()
+    held["month"] = pd.to_datetime(held["date"]).dt.to_period("M")
+    prices = historic_prices[["date", "isin", "price"]].copy()
+    prices["month"] = _to_month(prices["date"])
+    prices = prices.groupby(["isin", "month"], as_index=False)["price"].last()
+    held = held.merge(prices, on=["isin", "month"], how="left")
+    held = held.sort_values(["isin", "month"])
+    held["price"] = held.groupby("isin")["price"].transform(lambda s: s.ffill().bfill())
+    current = current_prices.set_index("isin")["price"]
+    held["price"] = held["price"].fillna(held["isin"].map(current))
+
+    ter = pd.to_numeric(
+        master_data.drop_duplicates("isin").set_index("isin")["ter"], errors="coerce"
+    )
+    held["ter"] = held["isin"].map(ter).fillna(0.0)
+    held["ter_cost"] = (
+        held["cumulative_shares"] * held["price"] * held["ter"] / 100 / 12
+    )
+    return (
+        held.groupby("isin", as_index=False)["ter_cost"]
+        .sum(min_count=1)
+        .rename(columns={"ter_cost": "ter_cost_to_date"})
+    )
+
+
 def calculate_portfolio_value(
     shares: pd.DataFrame,
     prices: pd.DataFrame,
     master_data: pd.DataFrame,
     portfolio: pd.DataFrame,
+    ter_costs: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
     """Joins the latest cumulative holdings with current prices and master data,
-    and computes gain/loss against the total invested cost per position."""
+    and computes gain/loss against the total invested cost per position.
+
+    The master-data attributes (``POSITION_ATTRIBUTE_COLUMNS``) are passed on,
+    and ``ter_costs`` (see :func:`calculate_ter_costs`) adds the estimated
+    ongoing costs so far as ``ter_cost_to_date`` (0 without it)."""
     latest_date = shares["date"].max()
     current_holdings = shares[shares["date"] == latest_date].copy()
     total_costs = (
@@ -709,23 +775,26 @@ def calculate_portfolio_value(
         .sum()
         .rename(columns={"cost": "total_cost"})
     )
-    result = current_holdings.merge(
-        master_data[
-            [
-                "isin",
-                "name",
-                "symbol",
-                "type",
-                "currency",
-                "ter",
-            ]
-        ],
-        on="isin",
-        how="left",
+    master = master_data.reindex(
+        columns=[
+            "isin",
+            "name",
+            "symbol",
+            "type",
+            "currency",
+            *POSITION_ATTRIBUTE_COLUMNS,
+        ]
     )
+    master["ter"] = pd.to_numeric(master["ter"], errors="coerce")
+    result = current_holdings.merge(master, on="isin", how="left")
     result = result.merge(prices[["isin", "price"]], on="isin", how="left")
     result = result.merge(total_costs, on="isin", how="left")
     result = result.merge(current_depots(portfolio), on="isin", how="left")
+    if ter_costs is not None:
+        result = result.merge(ter_costs, on="isin", how="left")
+        result["ter_cost_to_date"] = result["ter_cost_to_date"].fillna(0.0)
+    else:
+        result["ter_cost_to_date"] = 0.0
     result["value"] = result["cumulative_shares"] * result["price"]
     result["value_gained"] = (
         result["value"] - result["total_investment"] - result["total_cost"]
@@ -761,5 +830,7 @@ def calculate_portfolio_value(
             "type",
             "currency",
             "depot",
+            *POSITION_ATTRIBUTE_COLUMNS,
+            "ter_cost_to_date",
         ]
     ]

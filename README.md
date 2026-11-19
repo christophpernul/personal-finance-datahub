@@ -131,8 +131,22 @@ pure investment expense.
   `python -m datahub_stocks.init_master_data` (from `src`) creates it from the ISINs in the trade
   sheets with what Yahoo knows; fill in `replication`, `etf_type` and `comment`, and check
   `symbol` (the Yahoo ticker used for prices) and `currency`. An ETF without symbol gets no price.
-- **`stocks/source_stocks__master_data.csv`** — `name;symbol;currency;type;ter`, one row per
-  stock, `name` spelled as in the trade sheets, `symbol` the Yahoo ticker (e.g. `AMZN`).
+  The classification feeds the dashboard's Allocation tab; use these values (lower case):
+  - `ter` — total expense ratio in % per year (`0,2`),
+  - `region` — `usa`, `europe`, `emerging`, `world` or `commodities` (gold, silver and
+    commodity ETFs/ETCs),
+  - `distribution` — `accumulating` or `distributing`,
+  - `replication` — `physical` or `synthetic` (swap),
+  - `etf_type` — `index`, `dividend`, `value`, `small_cap`, `energy`, `real_estate` or
+    `commodity`.
+
+  A value left empty shows as *Unknown*. The Riester contract has its own row with `isin`
+  `RIESTER` (no symbol, so no price is fetched) for its classification; its `ter` stays empty
+  (its costs are the fees of the Raisin export). Re-running
+  `init_master_data` rewrites the file, so keep a copy of the hand-filled columns and this row.
+- **`stocks/source_stocks__master_data.csv`** — `name;symbol;currency;type;ter;region`, one row per
+  stock, `name` spelled as in the trade sheets, `symbol` the Yahoo ticker (e.g. `AMZN`), `region`
+  as for ETFs (where the company is based).
 - **`stocks/source_stock_mergers.ods`** — `isin_old`, `isin_new`, `name_old`, `name_new`, `type`,
   `date`, `stocks_old`, `stocks_new`: an ETF replaced by another; trades, dividends and costs of
   the old ISIN move to the new one, shares × `stocks_new / stocks_old`.
@@ -218,6 +232,12 @@ transactions, so both always agree.
   **costs** (`total_cost`) = sum of its order fees.
 - **Gain** (`value_gained`) = value − invested − costs, `value_gained_pct` = gain / invested.
 - **Depot**: the broker(s) holding more than 1 % of the shares, largest first.
+- **Attributes**: `ter`, `region`, `distribution`, `replication` and `etf_type` are copied from
+  the master data (stocks: `ter` and `region` only).
+- **Ongoing costs so far** (`ter_cost_to_date`, an estimate): the TER is no booking, the fund
+  takes it out of its assets day by day. For every month a position was held: shares at month
+  end × that month's closing price (`source_etf__price_historic.csv`; a month without a price
+  uses the closest one) × TER / 12, summed up. Positions without TER: 0.
 
 ### Riester contract
 
@@ -229,6 +249,10 @@ price):
   refunds included.
 - **Gain** = value − invested. The fees are *not* subtracted again: Raisin takes them out of the
   contract, so they already lower the value (for ETFs the order fees are paid on top).
+- **Classification**: `region`, `distribution`, `replication`, `etf_type` from the `RIESTER` row
+  of `source_etf__master_data.csv` (without that row the contract is unclassified).
+- **No TER**: `ter` is empty and `ter_cost_to_date` 0; the contract's costs are only the fees of
+  the Raisin export (`total_cost`).
 
 ### Returns per year (XIRR)
 
