@@ -24,6 +24,7 @@ from datahub_stocks.transform.preprocessing import (
     aggregate_monthly_riester,
     calculate_portfolio_value,
     calculate_ter_costs,
+    latest_savings_plan,
     combine_portfolio_values,
     build_portfolio_cashflows,
 )
@@ -51,6 +52,7 @@ from constants import (
     PATH_ETF_PRICE_CURRENT,
     PATH_ETF_PRICE_HISTORIC,
     PATH_ETF_SHARES_MONTHLY,
+    PATH_ETF_SAVINGS_PLAN,
     PATH_ETF_MONTHLY_INVESTMENTS,
     PATH_ETF_MONTHLY_REBALANCING,
     PATH_ETF_MONTHLY_DIVIDENDS,
@@ -226,6 +228,14 @@ def run_stocks():
     etf_shares = aggregate_monthly_shares(etf_holdings)
     save_data(etf_shares, PATH_ETF_SHARES_MONTHLY)
     logger.info("Monthly ETF share holdings computed and saved!")
+
+    # The latest execution of the monthly savings plan (highest Buys `index`)
+    savings_plan = latest_savings_plan(etf_buys, master_data)
+    save_data(savings_plan, PATH_ETF_SAVINGS_PLAN)
+    logger.info(
+        f"Latest savings plan execution #{savings_plan['index'].max()} saved: "
+        f"{savings_plan['amount'].sum():,.2f} EUR in {len(savings_plan)} ETFs"
+    )
 
     # Same for the individual stock portfolio (identified by name), after
     # re-basing pre-split shares into post-split units.
